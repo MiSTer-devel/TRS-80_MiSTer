@@ -258,7 +258,7 @@ begin
 				-- NL
 				when x"5A"=> keybits(6)(0)<=keypress;
 				-- CLR
-				when x"6C"=> keybits(6)(1)<=keypress;
+				when x"0D"|x"6C"=> keybits(6)(1)<=keypress;
 				-- BRK
 				when x"76"=> keybits(6)(2)<=keypress;
 				-- up-arrow
