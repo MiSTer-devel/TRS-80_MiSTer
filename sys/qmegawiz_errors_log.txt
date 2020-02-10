@@ -1,6 +1,0 @@
-
-
-/home/alans/mister/HT1080Z_MiSTer.new/sys/pll.v
-
-Aug 06 03PM:39:04>: Megafunction PLL Intel FPGA IP v18.1 is not listed in any 
-wizard.lst file in the specified library path(s).Wizard launch aborted

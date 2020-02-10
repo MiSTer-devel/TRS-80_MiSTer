@@ -15,7 +15,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [44:0] HPS_BUS,
+	inout  [45:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -44,6 +44,12 @@ module emu
 	// hint: supply 2'b00 to let the system control the LED.
 	output  [1:0] LED_POWER,
 	output  [1:0] LED_DISK,
+
+	// I/O board button press simulation (active high)
+	// b[1]: user button
+	// b[0]: osd button
+	output  [1:0] BUTTONS,
+
 
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
@@ -119,6 +125,7 @@ assign ADC_BUS  = 'Z;
 //assign VIDEO_ARX = status[9] ? 8'd16 : 8'd4;
 //assign VIDEO_ARY = status[9] ? 8'd9  : 8'd3;
 
+assign BUTTONS = 0;
 
 assign VIDEO_ARX = 4;
 assign VIDEO_ARY = 3;
@@ -134,7 +141,7 @@ assign LED_USER  = ioctl_download;
 localparam CONF_STR = {
 	"HT1080Z;;",
 	"F,CAS,Load Cassette;",
-	"O1,Scanlines,Off,On;",
+	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"R0,Reset;",
 	"V,v",`BUILD_DATE
@@ -153,6 +160,7 @@ wire  [7:0] ioctl_index;
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
 //wire [24:0] ps2_mouse;
+wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
@@ -168,6 +176,8 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) ), .PS2DIV(4000)/*, .WIDE(0)*/) hps_io
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	//.new_vmode(new_vmode),
+	.gamma_bus(gamma_bus),
+
 
 	.status(status),
 
@@ -216,8 +226,6 @@ ht1080z ht1080z(
 		.hblank(hblank),
 		.vblank(vblank),
 		.LED(LED),
-		.AUDIOL(AUDIOL),
-		.AUDIOR(AUDIOR),
 		.audiomix(audiomix),
 
 		.ps2clk(ps2_kbd_clk),
@@ -250,26 +258,61 @@ always @(posedge clk_sys) begin
 end
 		
 wire clk_vid;
-assign CE_PIXEL = clk_vid;
-assign CLK_VIDEO = clk_vid;
+//assign CE_PIXEL = clk_vid;
+assign CLK_VIDEO = clk42m;
 
 			
 ///////////////////////////////////////////////////
 //wire clk_sys, clk_ram, clk_ram2, clk_pixel, locked;
+//
+wire [2:0] scale = status[3:1];
+
+//video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+//video_mixer #(.LINE_LENGTH(384), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+video_mixer #(.GAMMA(1)) video_mixer
+(
+	.*,
+
+	.clk_vid(clk42m),
+	.ce_pix(clk_vid),
+	.ce_pix_out(CE_PIXEL),
+
+	.scanlines(0),
+	//.scandoubler(  scale || forced_scandoubler),
+	.scandoubler(  0),
+	.hq2x(scale==1),
+
+	.mono(0),
+
+	.R({RGB[5:0],2'b00}),
+	.G({RGB[11:6],2'b00}),
+	.B({RGB[17:12],2'b00}),
+
+	// Positive pulses.
+	.HSync(hs),
+	.VSync(vs),
+	.HBlank(~hblank),
+	.VBlank(~vblank)
+);
+//
+//
 wire clk_sys,locked;
 wire hs,vs,hblank,vblank;
 
-assign VGA_VS=vs;
-assign VGA_HS=hs;
+//assign VGA_VS=vs;
+//assign VGA_HS=hs;
 wire [8:0]audiomix;
 
 wire [17:0] RGB;
+/*
 //assign VGA_R=8'b11111111;
 assign VGA_R={RGB[5:0],2'b00};
 assign VGA_G={RGB[11:6],2'b00};
 assign VGA_B={RGB[17:12],2'b00};
 //assign VGA_DE=~(vblank | hblank);
 assign VGA_DE=(vblank & hblank);
+
+*/
 assign AUDIO_L={audiomix,7'b0000000};
 assign AUDIO_R=AUDIO_L;
 

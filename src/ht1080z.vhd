@@ -89,8 +89,6 @@ entity ht1080z is
 			LED : out  STD_LOGIC;
 			
 			audiomix: out STD_LOGIC_VECTOR(8 downto 0);
-			AUDIOL : out  STD_LOGIC;
-			AUDIOR : out  STD_LOGIC;
 			
 			
 			joy0 : in std_logic_vector(7 downto 0);
@@ -274,7 +272,6 @@ signal vdata : std_logic_vector(7 downto 0);
 -- 28 14 7 3.5 1.75
 signal clk56div : std_logic_vector(11 downto 0);
 
-signal dacout : std_logic;
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 signal oaudio,snddo : std_logic_vector(7 downto 0); 
 
@@ -456,15 +453,6 @@ begin
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
 	  
- -- Delta-Sigma DAC for audio (one channel, mono in this implementation)
- --audiodac : entity work.dac
- --   port map ( 
- --     clk_i   => clk7m,
- --     res_n_i => swres and pllLocked,
- --     dac_i   => audiomix(8 downto 1), --oaudio,
- --     dac_o   => dacout
- --   ); 
-
   with tapebits select speaker <=
    "00100000" when "001",
 	"00010000" when "000"|"011",
@@ -472,9 +460,6 @@ begin
  
   audiomix <= ('0' & oaudio) + ('0' & speaker); 
  	 
-  audiol <= dacout;
-  audior <= dacout; 	
-
 	-- fix palette for now
 	--with rgbi select rgb <=
 	with rgbi select ht_rgb <=
