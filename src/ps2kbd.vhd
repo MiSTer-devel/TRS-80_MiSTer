@@ -155,131 +155,132 @@ begin
 							   pageReg <= not pageReg;
 							end if;
 				
+				-- PS/2 key												-- ht1080z/TRS-80 key
 				-- \|
-				when x"5d"=> keybits(0)(0)<=keypress;
+				when x"5d"=> keybits(0)(0)<=keypress;			-- @
 				-- A
-				when x"1c"=> keybits(0)(1)<=keypress;
+				when x"1c"=> keybits(0)(1)<=keypress;			-- A
 				-- B
-				when x"32"=> keybits(0)(2)<=keypress;
+				when x"32"=> keybits(0)(2)<=keypress;			-- B
 				-- C
-				when x"21"=> keybits(0)(3)<=keypress;
+				when x"21"=> keybits(0)(3)<=keypress;			-- C
 				-- D
-				when x"23"=> keybits(0)(4)<=keypress;
+				when x"23"=> keybits(0)(4)<=keypress;			-- D
 				-- E
-				when x"24"=> keybits(0)(5)<=keypress;
+				when x"24"=> keybits(0)(5)<=keypress;			-- E
 				-- F
-				when x"2b"=> keybits(0)(6)<=keypress;
+				when x"2b"=> keybits(0)(6)<=keypress;			-- F
 				-- G
-				when x"34"=> keybits(0)(7)<=keypress;
+				when x"34"=> keybits(0)(7)<=keypress;			-- G
 
 				-- H
-				when x"33"=> keybits(1)(0)<=keypress;
+				when x"33"=> keybits(1)(0)<=keypress;			-- H
 				-- I
-				when x"43"=> keybits(1)(1)<=keypress;
+				when x"43"=> keybits(1)(1)<=keypress;			-- I
 				-- J
-				when x"3B"=> keybits(1)(2)<=keypress;
+				when x"3B"=> keybits(1)(2)<=keypress;			-- J
 				-- K
-				when x"42"=> keybits(1)(3)<=keypress;
+				when x"42"=> keybits(1)(3)<=keypress;			-- K
 				-- L
-				when x"4B"=> keybits(1)(4)<=keypress;
+				when x"4B"=> keybits(1)(4)<=keypress;			-- L
 				-- M
-				when x"3A"=> keybits(1)(5)<=keypress;
+				when x"3A"=> keybits(1)(5)<=keypress;			-- M
 				-- N
-				when x"31"=> keybits(1)(6)<=keypress;
+				when x"31"=> keybits(1)(6)<=keypress;			-- N
 				-- O
-				when x"44"=> keybits(1)(7)<=keypress;
+				when x"44"=> keybits(1)(7)<=keypress;			-- O
 
 				-- P
-				when x"4D"=> keybits(2)(0)<=keypress;
+				when x"4D"=> keybits(2)(0)<=keypress;			-- P
 				-- Q
-				when x"15"=> keybits(2)(1)<=keypress;
+				when x"15"=> keybits(2)(1)<=keypress;			-- Q
 				-- R
-				when x"2D"=> keybits(2)(2)<=keypress;
+				when x"2D"=> keybits(2)(2)<=keypress;			-- R
 				-- S
-				when x"1B"=> keybits(2)(3)<=keypress;
+				when x"1B"=> keybits(2)(3)<=keypress;			-- S
 				-- T
-				when x"2C"=> keybits(2)(4)<=keypress;
+				when x"2C"=> keybits(2)(4)<=keypress;			-- T
 				-- U
-				when x"3C"=> keybits(2)(5)<=keypress;
+				when x"3C"=> keybits(2)(5)<=keypress;			-- U
 				-- V
-				when x"2A"=> keybits(2)(6)<=keypress;
+				when x"2A"=> keybits(2)(6)<=keypress;			-- V
 				-- W
-				when x"1D"=> keybits(2)(7)<=keypress;
+				when x"1D"=> keybits(2)(7)<=keypress;			-- W
 
 				-- X
-				when x"22"=> keybits(3)(0)<=keypress;
+				when x"22"=> keybits(3)(0)<=keypress;			-- X
 				-- Y
-				when x"35"=> keybits(3)(1)<=keypress;
+				when x"35"=> keybits(3)(1)<=keypress;			-- Y
 				-- Z
-				when x"1A"=> keybits(3)(2)<=keypress;
+				when x"1A"=> keybits(3)(2)<=keypress;			-- Z
 				-- F2
-				when x"06"=> keybits(3)(4)<=keypress;
+				when x"06"=> keybits(3)(4)<=keypress;			-- (no key present - phantom keypress)
 				-- F3
-				when x"04"=> keybits(3)(5)<=keypress;
+				when x"04"=> keybits(3)(5)<=keypress;			-- (no key present - phantom keypress)
 				-- F4
-				when x"0C"=> keybits(3)(6)<=keypress;
+				when x"0C"=> keybits(3)(6)<=keypress;			-- (no key present - phantom keypress)
 				-- F1
-				when x"05"=> keybits(3)(7)<=keypress;
+				when x"05"=> keybits(3)(7)<=keypress;			-- (no key present - phantom keypress)
 
 				-- 0
-				when x"45"=> keybits(4)(0)<=keypress;
+				when x"45"=> keybits(4)(0)<=keypress;			-- 0
 				-- 1
-				when x"16"=> keybits(4)(1)<=keypress;
+				when x"16"=> keybits(4)(1)<=keypress;			-- 1
 				-- 2
-				when x"1E"=> keybits(4)(2)<=keypress;
+				when x"1E"=> keybits(4)(2)<=keypress;			-- 2
 				-- 3
-				when x"26"=> keybits(4)(3)<=keypress;
+				when x"26"=> keybits(4)(3)<=keypress;			-- 3
 				-- 4
-				when x"25"=> keybits(4)(4)<=keypress;
+				when x"25"=> keybits(4)(4)<=keypress;			-- 4
 				-- 5
-				when x"2E"=> keybits(4)(5)<=keypress;
+				when x"2E"=> keybits(4)(5)<=keypress;			-- 5
 				-- 6
-				when x"36"=> keybits(4)(6)<=keypress;
+				when x"36"=> keybits(4)(6)<=keypress;			-- 6
 				-- 7
-				when x"3D"=> keybits(4)(7)<=keypress;
+				when x"3D"=> keybits(4)(7)<=keypress;			-- 7
 
 				-- 8
-				when x"3E"=> keybits(5)(0)<=keypress;
+				when x"3E"=> keybits(5)(0)<=keypress;			-- 8
 				-- 9
-				when x"46"=> keybits(5)(1)<=keypress;
-				-- *:
-				when x"0E"|x"4e" => keybits(5)(2)<=keypress;
+				when x"46"=> keybits(5)(1)<=keypress;			-- 9
+				-- `(backtick), -(minus)
+				when x"0E"|x"4e" => keybits(5)(2)<=keypress;	-- :*
 				-- +;
-				when x"4C"=> keybits(5)(3)<=keypress;
+				when x"4C"=> keybits(5)(3)<=keypress;			-- ;:
 				-- <,
-				when x"41"=> keybits(5)(4)<=keypress;
-				-- =-
-				when x"55"|x"7b"=> keybits(5)(5)<=keypress;
+				when x"41"=> keybits(5)(4)<=keypress;			-- ,<
+				-- =, Keypad -
+				when x"55"|x"7b"=> keybits(5)(5)<=keypress;	-- -=
 				-- >.
-				when x"49"=> keybits(5)(6)<=keypress;
+				when x"49"=> keybits(5)(6)<=keypress;			-- .>
 				-- ?/
-				when x"4A"=> keybits(5)(7)<=keypress;
+				when x"4A"=> keybits(5)(7)<=keypress;			-- /?
 
-				-- NL
-				when x"5A"=> keybits(6)(0)<=keypress;
-				-- CLR
-				when x"6C"=> keybits(6)(1)<=keypress;
-				-- BRK
-				when x"76"=> keybits(6)(2)<=keypress;
+				-- ENTER
+				when x"5A"=> keybits(6)(0)<=keypress;			-- ENTER
+				-- TAB, Keypad 7
+				when x"0D"|x"6C"=> keybits(6)(1)<=keypress;	-- CLEAR
+				-- ESCAPE
+				when x"76"=> keybits(6)(2)<=keypress;			-- BREAK
 				-- up-arrow
-				when x"75"=> keybits(6)(3)<=keypress;
+				when x"75"=> keybits(6)(3)<=keypress;			-- UP ARROW
 				-- dn-arrow
-				when x"72"=> keybits(6)(4)<=keypress;
+				when x"72"=> keybits(6)(4)<=keypress;			-- DN ARROW
 				-- lf-arrow and backspace
-				when x"6B"|x"66"=> keybits(6)(5)<=keypress;
+				when x"6B"|x"66"=> keybits(6)(5)<=keypress;	-- LF ARROW
 				-- rg-arrow
-				when x"74"=> keybits(6)(6)<=keypress;
+				when x"74"=> keybits(6)(6)<=keypress;			-- RT ARROW
 				-- SPA
-				when x"29"=> keybits(6)(7)<=keypress;
+				when x"29"=> keybits(6)(7)<=keypress;			-- SPACE
 
 				-- L-SHIFT R-SHIFT
-				when x"12"|x"59"=> keybits(7)(0)<=keypress;
+				when x"12"|x"59"=> keybits(7)(0)<=keypress;	-- SHIFT
 				
 				-- numpad *
-				when x"7c"=> keybits(5)(2)<=keypress;
+				when x"7c"=> keybits(5)(2)<=keypress;			-- *
 								 keybits(7)(0)<=keypress;
 				-- numpad +
-				when x"79"=> keybits(5)(3)<=keypress;
+				when x"79"=> keybits(5)(3)<=keypress;			-- +
 								 keybits(7)(0)<=keypress;
 
 			   when others =>
