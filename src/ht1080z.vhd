@@ -380,7 +380,7 @@ begin
 		  wr => cpuwr,
 		  cs => not vramsel,
 		vcut => vcut,
-		vvga => vga,
+		--vvga => vga,
 		page => page,
 		rgbi => rgbi, 
 	   pclk => pclk,

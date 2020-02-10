@@ -279,7 +279,7 @@ video_mixer #(.GAMMA(1)) video_mixer
 
 	.scanlines(0),
 	//.scandoubler(  scale || forced_scandoubler),
-	.scandoubler(  0),
+	.scandoubler(  scale|| forced_scandoubler),
 	.hq2x(scale==1),
 
 	.mono(0),

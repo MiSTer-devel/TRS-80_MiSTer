@@ -60,7 +60,7 @@ entity videoctrl is
               wr : in  STD_LOGIC;
 				  cs : in  STD_LOGIC;
 				vcut : in  STD_LOGIC;
-				vvga : in  STD_LOGIC;
+				--vvga : in  STD_LOGIC;
 				page : in  STD_LOGIC;
 				inkp : in  STD_LOGIC;
 			 paperp : in  STD_LOGIC;
@@ -390,8 +390,11 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
+signal vvga : std_logic;
+
 begin
- 
+
+vvga <= '0';	
 --pxclk <= clk10_5;
 --xpxclk <= clk10_5 when vcut='0' else clk5_25;
 --hstart <= conv_std_logic_vector(H_START,10);
