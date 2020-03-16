@@ -1,5 +1,5 @@
 --
--- HT 1080Z (TSR-80 clone) ps2 keyboard
+-- HT 1080Z (TRS-80 clone) ps2 keyboard
 --
 --
 -- Copyright (c) 2016-2017 Jozsef Laszlo (rbendr@gmail.com)
@@ -50,6 +50,7 @@ entity ps2kbd is
 	   RESET : in  STD_LOGIC;
  	   KBCLK : in  STD_LOGIC;
 	   KBDAT : in  STD_LOGIC;
+	   KBLAYOUT : in  STD_LOGIC;
 		SWRES : out STD_LOGIC;
 	     CLK : in  STD_LOGIC;
 		    A : in  STD_LOGIC_VECTOR(7 downto 0);
@@ -75,6 +76,7 @@ signal hasRead  : std_logic;
 signal keybits : keys;
 signal keysout : keys;
 signal lastkc : std_logic;
+signal shiftstate : std_logic := '0';
 
 signal kbdsign : std_logic;
 signal kbddata : std_logic_vector(7 downto 0);
@@ -157,7 +159,10 @@ begin
 				
 				-- PS/2 key												-- ht1080z/TRS-80 key
 				-- \|
-				when x"5d"=> keybits(0)(0)<=keypress;			-- @
+				when x"5d"=>
+					if KBLAYOUT='0' then
+						keybits(0)(0)<=keypress;					-- @, only on TRS-80 layout
+					end if;												-- no '\' or '|' on TRS-80 layout
 				-- A
 				when x"1c"=> keybits(0)(1)<=keypress;			-- A
 				-- B
@@ -222,59 +227,160 @@ begin
 				-- F1
 				when x"05"=> keybits(3)(7)<=keypress;			-- (no key present - phantom keypress)
 
-				-- 0
-				when x"45"=> keybits(4)(0)<=keypress;			-- 0
-				-- 1
-				when x"16"=> keybits(4)(1)<=keypress;			-- 1
-				-- 2
-				when x"1E"=> keybits(4)(2)<=keypress;			-- 2
-				-- 3
-				when x"26"=> keybits(4)(3)<=keypress;			-- 3
-				-- 4
-				when x"25"=> keybits(4)(4)<=keypress;			-- 4
-				-- 5
-				when x"2E"=> keybits(4)(5)<=keypress;			-- 5
-				-- 6
-				when x"36"=> keybits(4)(6)<=keypress;			-- 6
-				-- 7
-				when x"3D"=> keybits(4)(7)<=keypress;			-- 7
 
-				-- 8
-				when x"3E"=> keybits(5)(0)<=keypress;			-- 8
-				-- 9
-				when x"46"=> keybits(5)(1)<=keypress;			-- 9
+				-- 0)
+				when x"45"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard ')' (shift+'0'), then '9' + shift
+						keybits(5)(1)<=keypress;
+						keybits(7)(0)<=keypress;
+					else
+						keybits(4)(0)<=keypress;					-- 0
+					end if;
+
+				-- 1!
+				when x"16"=> keybits(4)(1)<=keypress;			-- 1!
+
+				-- 2@
+				when x"1E"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard '@' (shift+'2'), then '@'
+						keybits(0)(0)<=keypress;
+					else
+						keybits(4)(2)<=keypress;					-- 2"
+					end if;
+
+				-- 3#
+				when x"26"=> keybits(4)(3)<=keypress;			-- 3#
+
+				-- 4$
+				when x"25"=> keybits(4)(4)<=keypress;			-- 4$
+
+				-- 5%
+				when x"2E"=> keybits(4)(5)<=keypress;			-- 5%
+
+				-- 6^
+				when x"36"=>
+					if KBLAYOUT='0' or shiftstate = '0' then	-- no '^' key on TRS-80 keyboard
+						keybits(4)(6)<=keypress;					-- 6&
+					end if;
+
+				-- 7&
+				when x"3D"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard '&' (shift+'7'), then '6' + shift
+						keybits(4)(6)<=keypress;
+						keybits(7)(0)<=keypress;
+					else
+						keybits(4)(7)<=keypress;					-- 7'
+					end if;
+
+
+				-- 8*
+				when x"3E"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard '*' (shift+'8'), then ':' + shift
+						keybits(5)(2)<=keypress;
+						keybits(7)(0)<=keypress;
+					else
+						keybits(5)(0)<=keypress;					-- 8(
+					end if;
+				
+				-- 9(
+				when x"46"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard ')' (shift+'9'), then '8' + shift
+						keybits(5)(0)<=keypress;
+						keybits(7)(0)<=keypress;
+					else
+						keybits(5)(1)<=keypress;					-- 9)
+					end if;
+
 				-- `(backtick), -(minus)
-				when x"0E"|x"4e" => keybits(5)(2)<=keypress;	-- :*
-				-- +;
-				when x"4C"=> keybits(5)(3)<=keypress;			-- ;:
+				when x"0E" =>
+					if KBLAYOUT='0' then								-- no ` backtick on TRS-80 keyboard
+						keybits(5)(2)<=keypress;					-- :
+					end if;
+
+				-- -(minus)
+				when x"4e" =>
+					if KBLAYOUT='0' then
+						keybits(5)(2)<=keypress;					-- :*
+					elsif shiftstate='0' then						-- no '_' on TRS-80 keyboard
+						keybits(5)(5)<=keypress;					-- -(minus)
+					end if;
+
+				-- ;:
+				when x"4C"=>
+					if KBLAYOUT='1' and shiftstate = '1' then	-- if PC keyboard ':' (shift+';') then ':'
+						keybits(5)(2)<=keypress;
+						keybits(7)(0)<= not keypress;
+												
+					else
+						keybits(5)(3)<=keypress;					-- ;+
+					end if;
+
 				-- <,
 				when x"41"=> keybits(5)(4)<=keypress;			-- ,<
-				-- =, Keypad -
-				when x"55"|x"7b"=> keybits(5)(5)<=keypress;	-- -=
+
+				-- =+
+				when x"55"=>
+					if KBLAYOUT='1' then								-- if PC keyboard '='
+						if shiftstate = '0' then
+							keybits(5)(5)<=keypress;				-- =
+							keybits(7)(0)<=keypress;
+						else
+							keybits(5)(3)<=keypress;				-- +
+							keybits(7)(0)<=keypress;
+						end if;
+					else
+						keybits(5)(5)<=keypress;					-- -=
+					end if;
+
+				-- Keypad -
+				when x"7b"=> keybits(5)(5)<=keypress;			-- -=
+
 				-- >.
 				when x"49"=> keybits(5)(6)<=keypress;			-- .>
+
 				-- ?/
 				when x"4A"=> keybits(5)(7)<=keypress;			-- /?
 
+				-- '"
+				when x"52"=>
+					if KBLAYOUT='1' then
+						if shiftstate = '1' then
+							keybits(4)(2)<=keypress;				-- 2"
+							keybits(7)(0)<=keypress;
+						else
+							keybits(4)(7)<=keypress;				-- 7'
+							keybits(7)(0)<=keypress;
+						end if;
+					end if;
+
+
 				-- ENTER
 				when x"5A"=> keybits(6)(0)<=keypress;			-- ENTER
+
 				-- TAB, Keypad 7
 				when x"0D"|x"6C"=> keybits(6)(1)<=keypress;	-- CLEAR
+
 				-- ESCAPE
 				when x"76"=> keybits(6)(2)<=keypress;			-- BREAK
+
 				-- up-arrow
 				when x"75"=> keybits(6)(3)<=keypress;			-- UP ARROW
+
 				-- dn-arrow
 				when x"72"=> keybits(6)(4)<=keypress;			-- DN ARROW
+
 				-- lf-arrow and backspace
 				when x"6B"|x"66"=> keybits(6)(5)<=keypress;	-- LF ARROW
+
 				-- rg-arrow
 				when x"74"=> keybits(6)(6)<=keypress;			-- RT ARROW
-				-- SPA
+
+				-- SPACE
 				when x"29"=> keybits(6)(7)<=keypress;			-- SPACE
 
 				-- L-SHIFT R-SHIFT
 				when x"12"|x"59"=> keybits(7)(0)<=keypress;	-- SHIFT
+								shiftstate <=keypress;
 				
 				-- numpad *
 				when x"7c"=> keybits(5)(2)<=keypress;			-- *

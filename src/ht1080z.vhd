@@ -96,6 +96,7 @@ entity ht1080z is
 
 			ps2clk : in  STD_LOGIC;
 			ps2dat : in  STD_LOGIC;
+			kybdlayout : in  STD_LOGIC;
 			
 			pixel_clock: out STD_LOGIC;
 			  
@@ -190,7 +191,7 @@ end component;
  --     );
 --end component user_io;
     
-constant CONF_STR : string := "HT1080Z;CAS;O1,Scanlines,Off,On;T2,Reset";
+-- constant CONF_STR : string := "HT1080Z;CAS;O1,Scanlines,Off,On;T2,Reset";
   --"SMS;SMS;O1,Video,NTSC,PAL;O2,Scanlines,Off,On;O3,Joysticks,Normal,Swapped;T4,Pause;T5,Reset";
 
   function to_slv(s: string) return std_logic_vector is
@@ -407,6 +408,7 @@ begin
 	   RESET => not pllLocked,
  	   KBCLK => ps2clk,
 	   KBDAT => ps2dat,
+	   KBLAYOUT => kybdlayout,
 		SWRES => swres,
 	     CLK => clk7m,
 		    A => cpua(7 downto 0),

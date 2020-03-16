@@ -142,6 +142,7 @@ localparam CONF_STR = {
 	"HT1080Z;;",
 	"F,CAS,Load Cassette;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"O4,Kbd Layout,TRS-80,PC;",
 	"-;",
 	"R0,Reset;",
 	"V,v",`BUILD_DATE
@@ -230,6 +231,7 @@ ht1080z ht1080z(
 
 		.ps2clk(ps2_kbd_clk),
 		.ps2dat(ps2_kbd_data),
+		.kybdlayout(status[4]),
 		
 			  
 		.dn_go(ioctl_download),
