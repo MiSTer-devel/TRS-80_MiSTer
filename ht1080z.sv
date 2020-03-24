@@ -141,7 +141,11 @@ assign LED_USER  = ioctl_download;
 localparam CONF_STR = {
 	"HT1080Z;;",
 	"F,CAS,Load Cassette;",
+	"-;",
+	"O56,Screen Color,White,Green,Amber;",
+	"O7,Lowercase Type,Normal,Symbol;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"-;",
 	"R0,Reset;",
@@ -210,16 +214,16 @@ ht1080z ht1080z(
 		.plllocked(locked),
 	
 		 //-- SDRAM
-		.SDRAM_nCS(SDRAM_nCS),		//                   -- Chip Select
+		.SDRAM_nCS(SDRAM_nCS),		//  -- Chip Select
 		.SDRAM_DQ(SDRAM_DQ),			//  -- SDRAM Data bus 16 Bits
-		.SDRAM_A(SDRAM_A),			// : -- SDRAM Address bus 13 Bits
-		.SDRAM_DQMH(SDRAM_DQMH),//  -- SDRAM High Data Mask
-		.SDRAM_DQML(SDRAM_DQML),//  -- SDRAM Low-byte Data Mask
-		.SDRAM_nWE(SDRAM_nWE),// -- SDRAM Write Enable
-		.SDRAM_nCAS(SDRAM_nCAS),// -- SDRAM Column Address Strobe
-		.SDRAM_nRAS(SDRAM_nRAS),// -- SDRAM Row Address Strobe
-		.SDRAM_BA(SDRAM_BA),//  -- SDRAM Bank Address
-		.SDRAM_CKE(SDRAM_CKE),//  -- SDRAM Clock Enable			 
+		.SDRAM_A(SDRAM_A),			//  -- SDRAM Address bus 13 Bits
+		.SDRAM_DQMH(SDRAM_DQMH),	//  -- SDRAM High Data Mask
+		.SDRAM_DQML(SDRAM_DQML),	//  -- SDRAM Low-byte Data Mask
+		.SDRAM_nWE(SDRAM_nWE),		//  -- SDRAM Write Enable
+		.SDRAM_nCAS(SDRAM_nCAS),	//  -- SDRAM Column Address Strobe
+		.SDRAM_nRAS(SDRAM_nRAS),	//  -- SDRAM Row Address Strobe
+		.SDRAM_BA(SDRAM_BA),			//  -- SDRAM Bank Address
+		.SDRAM_CKE(SDRAM_CKE),		//  -- SDRAM Clock Enable			 
 			  			  			  
 		.RGB(RGB),
 		.HSYNC(hs),
@@ -232,6 +236,8 @@ ht1080z ht1080z(
 		.ps2clk(ps2_kbd_clk),
 		.ps2dat(ps2_kbd_data),
 		.kybdlayout(status[4]),
+		.disp_color(status[6:5]),
+		.lcasetype(status[7]),
 		
 			  
 		.dn_go(ioctl_download),

@@ -97,7 +97,9 @@ entity ht1080z is
 			ps2clk : in  STD_LOGIC;
 			ps2dat : in  STD_LOGIC;
 			kybdlayout : in  STD_LOGIC;
-			
+			disp_color : in std_logic_vector(1 downto 0);
+			lcasetype  : in STD_LOGIC;
+
 			pixel_clock: out STD_LOGIC;
 			  
 			dn_go : in std_logic;
@@ -276,7 +278,12 @@ signal clk56div : std_logic_vector(11 downto 0);
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 signal oaudio,snddo : std_logic_vector(7 downto 0); 
 
+signal ht_rgb_white : std_logic_vector(17 downto 0);
+signal ht_rgb_green : std_logic_vector(17 downto 0);
+signal ht_rgb_amber : std_logic_vector(17 downto 0);
+
 signal ht_rgb : std_logic_vector(17 downto 0);
+
 signal out_rgb : std_logic_vector(17 downto 0);
 signal p_hs,p_vs,vgahs,vgavs : std_logic; 
 signal pclk : std_logic; 
@@ -292,6 +299,7 @@ signal scanlines : std_logic;
 signal oddline : std_logic;
 
 signal inkpulse, paperpulse, borderpulse : std_logic;
+signal widemode : std_logic := '0';
 
 begin
 
@@ -366,7 +374,9 @@ begin
 
     pvsel <='0' ;
 	 vga <= not pvsel;		  
-  vdata <= cpudo when cpudo>x"1f" else cpudo or x"40";
+--  vdata <= cpudo when cpudo>x"1f" else cpudo or x"40";	-- This forces video memory to uppercase values when written to by values < 0x20
+  vdata <= cpudo;
+  
   -- video ram at 0x3C00
   video : entity work.videoctrl 
     port map (   
@@ -388,6 +398,8 @@ begin
 		inkp => inkpulse,
 	 paperp => paperpulse,
 	borderp => borderpulse,
+  widemode => widemode,
+ lcasetype => lcasetype,
 	oddline => oddline,
 	  hsync => hs,
 	  vsync => vs,
@@ -461,10 +473,11 @@ begin
    "00000000" when others;
  
   audiomix <= ('0' & oaudio) + ('0' & speaker); 
- 	 
-	-- fix palette for now
-	--with rgbi select rgb <=
-	with rgbi select ht_rgb <=
+
+
+  -- Note: format of colors below is 6 bits each of: BGR, not RGB
+  
+	with rgbi select ht_rgb_white <=
 	 "000000000000000000" when "0000",
 	 "000000000000100000" when "0001",
 	 "000000100000000000" when "0010",
@@ -482,6 +495,50 @@ begin
 	 "111110111110000000" when "1110",
 	 "111110111110111110" when others;
 
+	with rgbi select ht_rgb_green <=
+	 "000000000000000000" when "0000",
+	 "000000000000000000" when "0001",
+	 "000000100000000000" when "0010",
+	 "000000100000000000" when "0011",
+	 "000000000000000000" when "0100",
+	 "000000000000000000" when "0101",
+	 "000000011000000000" when "0110",
+	 "000000100000000000" when "0111",
+	 "000000110000000000" when "1000",
+	 "000000000000000000" when "1001",
+	 "000000111100000000" when "1010",
+	 "000000111100000000" when "1011",
+	 "000000000000000000" when "1100",
+	 "000000000000000000" when "1101",
+	 "000000111110000000" when "1110",
+	 "000000111110000000" when others;
+
+	with rgbi select ht_rgb_amber <=
+	 "000000000000000000" when "0000",
+	 "000000000000100000" when "0001",
+	 "000000010000000000" when "0010",
+	 "000000010000100000" when "0011",
+	 "000000000000000000" when "0100",
+	 "000000000000100000" when "0101",
+	 "000000001100000000" when "0110",
+	 "000000010000100000" when "0111",
+	 "000000011000110000" when "1000",
+	 "000000000000111100" when "1001",
+	 "000000011110000000" when "1010",
+	 "000000011110111100" when "1011",
+	 "000000000000000000" when "1100",
+	 "000000000000111100" when "1101",
+	 "000000011111000000" when "1110",
+	 "000000011111111110" when others;
+
+
+  ht_rgb <=
+	 ht_rgb_white when disp_color = "00" else
+	 ht_rgb_green when disp_color = "01" else
+	 ht_rgb_amber when disp_color = "10" else
+	 "111110111110111110";
+
+	 
   scanlines <= status(1) and vga and oddline;
 	   
 --  userio: user_io
@@ -626,6 +683,7 @@ clk_download_out<=clk_download;
 		if rising_edge(cpuClk) then  
 		  if iow='0' and cpua(7 downto 0)=x"ff" then 
 		    tapebits <= cpudo(2 downto 0);
+		    widemode <= cpudo(3);
 		  end if;
 		  if iow='0' and cpua(7 downto 2)="000001" then -- out 4 5 6
 			 case cpua(1 downto 0) is
