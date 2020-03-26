@@ -133,7 +133,7 @@ assign VIDEO_ARY = 3;
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
-assign LED_DISK  = LED;						/* later add tape/disk motor on/off */
+assign LED_DISK  = LED;						/* later add disk motor on/off */
 assign LED_POWER = 0;
 assign LED_USER  = ioctl_download;
 

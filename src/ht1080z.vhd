@@ -274,7 +274,9 @@ signal io_ram_addr : std_logic_vector(23 downto 0);
 signal iorrd,iorrd_r : std_logic;
 
 --signal audiomix : std_logic_vector(8 downto 0); 
-signal tapebits : std_logic_vector(2 downto 0); 
+signal tapebits : std_logic_vector(2 downto 0);
+alias tapemotor : std_logic is tapebits(2);
+
 signal  speaker : std_logic_vector(7 downto 0); 
 signal vga : std_logic := '0';
 signal scanlines : std_logic;
@@ -285,7 +287,7 @@ signal widemode : std_logic := '0';
 
 begin
 
-  led <= not scanlines; --not dn_go;--swres;
+  led <= tapemotor; -- not scanlines; --not dn_go;--swres;
   
   -- generate system clocks 
   --clkmgr : entity work.pll
