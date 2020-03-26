@@ -57,19 +57,7 @@ entity ht1080z is
 			clk42m : in  STD_LOGIC;
 			plllocked: in STD_LOGIC;
 			
-			-- SDRAM
-			SDRAM_nCS : out std_logic;                     -- Chip Select
-		   SDRAM_DQ : inout std_logic_vector(15 downto 0); -- SDRAM Data bus 16 Bits
-			SDRAM_A : out std_logic_vector(12 downto 0);  -- SDRAM Address bus 13 Bits
-			SDRAM_DQMH : out std_logic; -- SDRAM High Data Mask
-			SDRAM_DQML : out std_logic; -- SDRAM Low-byte Data Mask
-			SDRAM_nWE : out std_logic;  -- SDRAM Write Enable
-			SDRAM_nCAS : out std_logic; -- SDRAM Column Address Strobe
-			SDRAM_nRAS : out std_logic; -- SDRAM Row Address Strobe
-		   SDRAM_BA : out std_logic_vector(1 downto 0); -- SDRAM Bank Address
-			--  SDRAM_CLK : out std_logic; -- SDRAM Clock
-			SDRAM_CKE : out std_logic; -- SDRAM Clock Enable			 
-			  			  			  
+
 			-- SPI interface to arm io controller
 			SPI_DO	: out std_logic;
 			SPI_DI	: in  std_logic;
@@ -110,8 +98,6 @@ entity ht1080z is
 
 			clk_download_out : out std_logic
 
-			  
-
 			  ); 
 end ht1080z;
 
@@ -133,25 +119,23 @@ component data_io
 );
 end component data_io;
 
-component sdram is
-      port( sd_data : inout std_logic_vector(15 downto 0);
-            sd_addr : out std_logic_vector(12 downto 0);
-             sd_dqm : out std_logic_vector(1 downto 0);
-              sd_ba : out std_logic_vector(1 downto 0);
-              sd_cs : out std_logic;
-              sd_we : out std_logic;
-             sd_ras : out std_logic;
-             sd_cas : out std_logic;
-               init : in std_logic;
-                clk : in std_logic;
-             clkref : in std_logic;
-                din : in std_logic_vector(7 downto 0);
-               dout : out std_logic_vector(7 downto 0);
-               addr : in std_logic_vector(24 downto 0);
-                 oe : in std_logic;
-                 we : in std_logic
-      );
-end component;
+
+
+component spram is
+   generic (
+			data_width : integer;
+			addr_width : integer
+	);
+   port (
+				  clock : in std_logic;
+				   wren : in std_logic;
+				address : in std_logic_vector(addr_width-1 downto 0);
+					data : in std_logic_vector(data_width-1 downto 0);
+						q : out std_logic_vector(data_width-1 downto 0);
+					  cs : in std_logic
+	);
+end component spram;
+
 
 --component osd
 --  generic ( OSD_COLOR : integer );
@@ -193,8 +177,6 @@ end component;
  --     );
 --end component user_io;
     
--- constant CONF_STR : string := "HT1080Z;CAS;O1,Scanlines,Off,On;T2,Reset";
-  --"SMS;SMS;O1,Video,NTSC,PAL;O2,Scanlines,Off,On;O3,Joysticks,Normal,Swapped;T4,Pause;T5,Reset";
 
   function to_slv(s: string) return std_logic_vector is
     constant ss: string(1 to s'length) := s;
@@ -213,12 +195,12 @@ end component;
   end function;   
 
 
-signal sdram_dqm  : std_logic_vector(1 downto 0);
-signal ram_addr : std_logic_vector(24 downto 0);
-signal  ram_din : STD_LOGIC_VECTOR(7 downto 0);
+signal ram_addr : std_logic_vector(15 downto 0);
+signal ram_din : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_dout : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_we: std_logic;
-signal ram_oe: std_logic; 
+signal ram_oe: std_logic;
+
 
 --signal   dn_go : std_logic;
 --signal   dn_wr : std_logic;
@@ -405,7 +387,6 @@ begin
 	  vsync => vs,
 	  hb => hblank,
 	  vb => vblank
-	  
    );  
 	
 	pixel_clock<=pclk;
@@ -594,36 +575,29 @@ begin
   RGB(11 downto  6) <= out_RGB(11 downto  6) when scanlines='0' else "0" & out_RGB(11 downto  7);
   RGB( 5 downto  0) <= out_RGB( 5 downto  0) when scanlines='0' else "0" & out_RGB( 5 downto  1);
   	
-  sdram_inst : sdram
-    port map( sd_data => SDRAM_DQ,
-              sd_addr => SDRAM_A,
-               sd_dqm => sdram_dqm,
-                sd_cs => SDRAM_nCS,
-                sd_ba => SDRAM_BA,
-                sd_we => SDRAM_nWE,
-               sd_ras => SDRAM_nRAS,
-               sd_cas => SDRAM_nCAS,
-                  clk => clk56m,
-               clkref => clk_download, --cpuClk,
-                 init => not pllLocked,
-                  din => ram_din,
-                 addr => ram_addr,
-                   we => ram_we,
-                   oe => ram_oe,
-                 dout => ram_dout
-    ); 	
+	 
+  main_mem : spram
+   generic map (
+			data_width	=> 8,
+			addr_width	=> 16
+	)
+   port map (
+				  clock	=> clk_download,
+				   wren	=> ram_we,
+				address	=> ram_addr,
+					data	=> ram_din,
+						q	=> ram_dout,
+					  cs	=> ram_oe
+	);
+	
   --ram_addr <= "000000000" & cpua when dn_go='0' else dn_addr_r; 
+
   ram_din <= cpudo when dn_go='0' else dn_data_r;
   ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r; 
-  --ram_oe <= not memr when dn_go='0' else '0';
-  
-  ram_addr <= "0" & io_ram_addr when iorrd='1' else "000000000" & cpua when dn_go='0' else dn_addr_r; 
+  ram_addr <= io_ram_addr(15 downto 0) when iorrd='1' else cpua when dn_go='0' else dn_addr_r(15 downto 0); 
   ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
-	 
-  -- sdram interface
-  SDRAM_CKE <= '1';
-  SDRAM_DQMH <= sdram_dqm(1);
-  SDRAM_DQML <= sdram_dqm(0); 	 
+  
+
 clk_download_out<=clk_download;
   
  -- dataio : data_io
@@ -643,6 +617,8 @@ clk_download_out<=clk_download;
 --		data  =>		dn_data	 
 --	 );
 
+
+
   process(clk_download)
   begin
     if rising_edge(clk_download) then
@@ -656,6 +632,7 @@ clk_download_out<=clk_download;
 	 end if;
   end process; 
   
+ 
  process (cpuClk)
  begin
    if rising_edge(cpuClk) then  

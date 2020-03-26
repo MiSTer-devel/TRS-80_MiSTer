@@ -103,10 +103,10 @@ module emu
 	// Open-drain User port.
 	// 0 - D+/RX
 	// 1 - D-/TX
-	// 2..5 - USR1..USR4
+	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
-	input   [5:0] USER_IN,
-	output  [5:0] USER_OUT,
+	input   [6:0] USER_IN,
+	output  [6:0] USER_OUT,
 
 	input         OSD_STATUS	
 );
@@ -133,8 +133,8 @@ assign VIDEO_ARY = 3;
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
-assign LED_DISK  = LED;
-assign LED_POWER = 1;
+assign LED_DISK  = LED;						/* later add tape/disk motor on/off */
+assign LED_POWER = 0;
 assign LED_USER  = ioctl_download;
 
 `include "build_id.v"
@@ -158,8 +158,8 @@ wire [31:0] status;
 wire  [1:0] buttons;
 wire        ioctl_download;
 wire        ioctl_wr;
-wire [13:0] ioctl_addr;
-wire [7:0] ioctl_data;
+wire [24:0] ioctl_addr;
+wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
 
 wire        forced_scandoubler;
@@ -170,7 +170,7 @@ wire [21:0] gamma_bus;
 wire [15:0] joystick_0, joystick_1;
 
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3) ), .PS2DIV(4000)/*, .WIDE(0)*/) hps_io
+hps_io #(.STRLEN(($size(CONF_STR)>>3) ), .PS2DIV(32)/*, .WIDE(0)*/) hps_io
 (
 	.clk_sys(/*CLK_VIDEO*/clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -213,18 +213,6 @@ ht1080z ht1080z(
 		.clk42m(clk42m),
 		.plllocked(locked),
 	
-		 //-- SDRAM
-		.SDRAM_nCS(SDRAM_nCS),		//  -- Chip Select
-		.SDRAM_DQ(SDRAM_DQ),			//  -- SDRAM Data bus 16 Bits
-		.SDRAM_A(SDRAM_A),			//  -- SDRAM Address bus 13 Bits
-		.SDRAM_DQMH(SDRAM_DQMH),	//  -- SDRAM High Data Mask
-		.SDRAM_DQML(SDRAM_DQML),	//  -- SDRAM Low-byte Data Mask
-		.SDRAM_nWE(SDRAM_nWE),		//  -- SDRAM Write Enable
-		.SDRAM_nCAS(SDRAM_nCAS),	//  -- SDRAM Column Address Strobe
-		.SDRAM_nRAS(SDRAM_nRAS),	//  -- SDRAM Row Address Strobe
-		.SDRAM_BA(SDRAM_BA),			//  -- SDRAM Bank Address
-		.SDRAM_CKE(SDRAM_CKE),		//  -- SDRAM Clock Enable			 
-			  			  			  
 		.RGB(RGB),
 		.HSYNC(hs),
 		.VSYNC(vs),
