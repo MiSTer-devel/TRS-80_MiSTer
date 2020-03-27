@@ -158,7 +158,7 @@ wire [31:0] status;
 wire  [1:0] buttons;
 wire        ioctl_download;
 wire        ioctl_wr;
-wire [24:0] ioctl_addr;
+wire [13:0] ioctl_addr;
 wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
 

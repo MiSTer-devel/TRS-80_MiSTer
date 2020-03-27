@@ -195,7 +195,7 @@ end component spram;
   end function;   
 
 
-signal ram_addr : std_logic_vector(15 downto 0);
+signal ram_addr : std_logic_vector(16 downto 0);
 signal ram_din : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_dout : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_we: std_logic;
@@ -581,7 +581,7 @@ begin
   main_mem : spram
    generic map (
 			data_width	=> 8,
-			addr_width	=> 16
+			addr_width	=> 17
 	)
    port map (
 				  clock	=> clk_download,
@@ -596,7 +596,7 @@ begin
 
   ram_din <= cpudo when dn_go='0' else dn_data_r;
   ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r; 
-  ram_addr <= io_ram_addr(15 downto 0) when iorrd='1' else cpua when dn_go='0' else dn_addr_r(15 downto 0); 
+  ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0); 
   ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
   
 
