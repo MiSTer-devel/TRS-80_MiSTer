@@ -209,8 +209,6 @@ ht1080z ht1080z(
                 .joy0(joystick_0),
                 .joy1(joystick_1),
 
-                //.clk86M(clk86M),
-                .clk86M(clk42m),
                 .clk42m(clk42m),
                 .clk_download(clk_sys),
                 .plllocked(locked),
@@ -313,16 +311,16 @@ assign VGA_DE=(vblank & hblank);
 assign AUDIO_L={audiomix,7'b0000000};
 assign AUDIO_R=AUDIO_L;
 
-wire clk86M,clk42m;
+wire clk42m;
   assign SDRAM_CLK  = '0;
 
-pll pll (
-         .refclk ( CLK_50M   ),
-         .rst(0),
-         .locked                ( locked    ),        // PLL is running stable
-         .outclk_0		( clk86M	),					// 56Mhz
-         .outclk_1		( clk42m		)        // 42 MHz
-         );
+pll pll
+  (
+   .refclk   (CLK_50M),
+   .rst      (0),
+   .locked   (locked),        // PLL is running stable
+   .outclk_0 (clk42m)         // 42 MHz
+   );
   assign clk_sys  = clk42m;
 
 endmodule

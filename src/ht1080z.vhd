@@ -53,7 +53,6 @@ entity ht1080z is
     status:in  std_logic_vector(7 downto 0);
 
     -- clocks
-    clk86M : in  STD_LOGIC;
     clk42m : in  STD_LOGIC;
     clk_download : in std_logic;
     plllocked: in STD_LOGIC;
@@ -326,9 +325,9 @@ begin
 --	);
 
 
-  process(clk86M)
+  process(clk42m)
   begin
-    if rising_edge(clk86M) then
+    if rising_edge(clk42m) then
       clk7m <= '0';
       --ps2clkout <= '0';
       cpuClk <= '0';
@@ -371,7 +370,7 @@ begin
   cpu : entity work.T80se
     port map (
       RESET_n => autores, --swres,
-      CLK_n   => clk86M, -- 1.75 MHz
+      CLK_n   => clk42m, -- 1.75 MHz
       CLKEN   => cpuClkEn,
       WAIT_n  => '1',
       INT_n   => '1',
@@ -450,7 +449,7 @@ begin
       KBDAT => ps2dat,
       KBLAYOUT => kybdlayout,
       SWRES => swres,
-      CLK => clk86M,
+      CLK => clk42m,
       CLK_en => clk7m,
       A => cpua(7 downto 0),
       DOUT => kbdout,
@@ -491,7 +490,7 @@ begin
       --
       ENA        => cpuClk,
       RESET_L    => autores,--swres and pllLocked,
-      CLK        => clk86M
+      CLK        => clk42m
       );
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
@@ -631,14 +630,14 @@ begin
       )
     port map (
       -- Port A
-      a_clk  => clk86M,
+      a_clk  => clk42m,
       a_wr   => dn_wr_r and dn_go,
       a_addr => dn_addr_r(16 downto 0),
       a_din  => dn_data_r,
       a_dout => open,
 
       -- Port B
-      b_clk  => clk86M,
+      b_clk  => clk42m,
       b_wr   => ram_we,
       b_addr => ram_addr,
       b_din  => cpudo,
@@ -688,9 +687,9 @@ begin
   end process;
 
 
-  process (clk86M)
+  process (clk42m)
   begin
-    if rising_edge(clk86M) then
+    if rising_edge(clk42m) then
       if cpuClk='1' then
         --if pllLocked='0' or status(0)='1' or status(2)='1' then
         if pllLocked='0' or reset='1' then
@@ -708,13 +707,13 @@ begin
   autores <= '1' when res_cnt="111111" else '0';
 
 
-  process (clk86M,dn_go,autores)
+  process (clk42m,dn_go,autores)
   begin
     if dn_go='1' or autores='0' then
       io_ram_addr <= x"010000"; -- above 64k
       iorrd_r<='0';
     else
-      if rising_edge(clk86M) then
+      if rising_edge(clk42m) then
         if cpuClk='1' then
           if iow='0' and cpua(7 downto 0)=x"ff" then
             tapebits <= cpudo(2 downto 0);
