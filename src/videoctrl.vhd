@@ -435,7 +435,7 @@ signal vvga : std_logic;
 
 begin
 
-vvga <= '0';	
+vvga <= '1';	
 --pxclk <= clk10_5;
 --xpxclk <= clk10_5 when vcut='0' else clk5_25;
 --hstart <= conv_std_logic_vector(H_START,10);
@@ -616,7 +616,7 @@ begin
 		  hsync <= '1';
 		end if;	
 		
-		if vctr<16 or vctr>257 then
+		if vctr<16 or vctr>259 then
 		  vblank <= '0';
 		else
 		  vblank <= '1';
@@ -625,7 +625,7 @@ begin
    end if;
 	
 
-	if vctr<2 then
+	if vctr<3 then
 	  vsync <= '0';
 	else
 	  vsync <= '1';

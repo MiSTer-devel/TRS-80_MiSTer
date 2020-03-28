@@ -1,5 +1,5 @@
 --
--- HT 1080Z (TSR-80 clone) top level
+-- HT 1080Z (TRS-80 clone) top level
 --
 --
 -- Copyright (c) 2016-2017 Jozsef Laszlo (rbendr@gmail.com)
@@ -53,6 +53,7 @@ entity ht1080z is
     status:in  std_logic_vector(7 downto 0);
 
     -- clocks
+    clk86M : in  STD_LOGIC;
     clk42m : in  STD_LOGIC;
     clk_download : in std_logic;
     plllocked: in STD_LOGIC;
@@ -303,7 +304,7 @@ architecture Behavioral of ht1080z is
   alias tapemotor : std_logic is tapebits(2);
 
   signal  speaker : std_logic_vector(7 downto 0);
-  signal vga : std_logic := '0';
+  signal vga : std_logic := '1';
   signal scanlines : std_logic;
   signal oddline : std_logic;
 
