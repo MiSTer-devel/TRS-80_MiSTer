@@ -53,7 +53,7 @@ entity ht1080z is
     status:in  std_logic_vector(7 downto 0);
 
     -- clocks
-    clk56M : in  STD_LOGIC;
+    clk86M : in  STD_LOGIC;
     clk42m : in  STD_LOGIC;
     clk_download : in std_logic;
     plllocked: in STD_LOGIC;
@@ -136,6 +136,28 @@ architecture Behavioral of ht1080z is
       );
   end component spram;
 
+  component dpram is
+    generic (
+      DATA : integer;
+      ADDR : integer
+      );
+    port (
+      -- Port A
+      a_clk : in std_logic;
+      a_wr : in std_logic;
+      a_addr : in std_logic_vector(ADDR-1 downto 0);
+      a_din : in std_logic_vector(DATA-1 downto 0);
+      a_dout : out std_logic_vector(DATA-1 downto 0);
+
+      -- Port B
+      b_clk : in std_logic;
+      b_wr : in std_logic;
+      b_addr : in std_logic_vector(ADDR-1 downto 0);
+      b_din : in std_logic_vector(DATA-1 downto 0);
+      b_dout : out std_logic_vector(DATA-1 downto 0)
+      );
+  end component dpram;
+
 
 --component osd
 --  generic ( OSD_COLOR : integer );
@@ -194,6 +216,7 @@ architecture Behavioral of ht1080z is
 
   end function;
 
+  attribute keep: boolean;
 
   signal ram_addr : std_logic_vector(16 downto 0);
   signal ram_din : STD_LOGIC_VECTOR(7 downto 0);
@@ -233,6 +256,9 @@ architecture Behavioral of ht1080z is
 --signal clk56m : std_logic;
 --signal clk42m,
   signal clk21m,clk7m : std_logic;
+  attribute keep of clk21m: signal is true;
+  attribute keep of clk7m: signal is true;
+
 --signal pllLocked : std_logic;
 
   signal cpua     : std_logic_vector(15 downto 0);
@@ -254,7 +280,8 @@ architecture Behavioral of ht1080z is
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
-  signal clk56div : std_logic_vector(11 downto 0);
+  signal clk1774_div : std_logic_vector(5 downto 0);
+  signal clk7_div : std_logic_vector(3 downto 0);
 
   signal sndBC1,sndBDIR,sndCLK : std_logic;
   signal oaudio,snddo : std_logic_vector(7 downto 0);
@@ -298,22 +325,29 @@ begin
 --        locked => pllLocked
 --	);
 
-  process(clk56m)
+
+  process(clk86M)
   begin
-    if rising_edge(clk56m) then
+    if rising_edge(clk86M) then
       clk7m <= '0';
       --ps2clkout <= '0';
       cpuClk <= '0';
-      if clk56div(1 downto 0) = "11" then
-        clk7m <= '1';
+      --if clk1774_div = 48 then
+      --if clk1774_div = "110000" then
+      if clk1774_div = "101111" then
+        cpuClk     <= '1';
+        clk1774_div <= "000000";
+      else
+        clk1774_div <= clk1774_div + 1;
       end if;
-      --if clk56div(10 downto 0) = "11111111111" then
-      --  ps2clkout <= '1';
-      --end if;
-      if clk56div(3 downto 0) = "1111" then
-        cpuClk <= '1';
+      --if clk7_div = 12 then
+      --if clk7_div = "0110" then
+      if clk7_div = "0101" then
+        clk7m    <= '1';
+        clk7_div <= "0000";
+      else
+        clk7_div <= clk7_div + 1;
       end if;
-      clk56div <= clk56div - 1;
     end if;
   end process;
   --clk7m <= clk56div(2);
@@ -337,7 +371,7 @@ begin
   cpu : entity work.T80se
     port map (
       RESET_n => autores, --swres,
-      CLK_n   => clk56m, -- 1.75 MHz
+      CLK_n   => clk86M, -- 1.75 MHz
       CLKEN   => cpuClkEn,
       WAIT_n  => '1',
       INT_n   => '1',
@@ -416,7 +450,7 @@ begin
       KBDAT => ps2dat,
       KBLAYOUT => kybdlayout,
       SWRES => swres,
-      CLK => clk56m,
+      CLK => clk86M,
       CLK_en => clk7m,
       A => cpua(7 downto 0),
       DOUT => kbdout,
@@ -457,7 +491,7 @@ begin
       --
       ENA        => cpuClk,
       RESET_L    => autores,--swres and pllLocked,
-      CLK        => clk56m
+      CLK        => clk86M
       );
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
@@ -590,24 +624,33 @@ begin
   RGB( 5 downto  0) <= out_RGB( 5 downto  0) when scanlines='0' else "0" & out_RGB( 5 downto  1);
 
 
-  main_mem : spram
+  main_mem : dpram
     generic map (
-      data_width	=> 8,
-      addr_width	=> 17
+      DATA => 8,
+      ADDR => 17
       )
     port map (
-      clock	=> clk_download,
-      wren	=> ram_we,
-      address	=> ram_addr,
-      data	=> ram_din,
-      q	=> ram_dout,
-      cs	=> ram_oe
+      -- Port A
+      a_clk  => clk86M,
+      a_wr   => dn_wr_r and dn_go,
+      a_addr => dn_addr_r(16 downto 0),
+      a_din  => dn_data_r,
+      a_dout => open,
+
+      -- Port B
+      b_clk  => clk86M,
+      b_wr   => ram_we,
+      b_addr => ram_addr,
+      b_din  => cpudo,
+      b_dout => ram_dout
       );
 
-  --ram_addr <= "000000000" & cpua when dn_go='0' else dn_addr_r;
+    --ram_addr <= "000000000" & cpua when dn_go='0' else dn_addr_r;
 
   ram_din <= cpudo when dn_go='0' else dn_data_r;
-  ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r;
+  --ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r;
+  ram_we <= ((not memw) and (cpua(15) or cpua(14))) and not dn_go and cpuClkEn;
+  --ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
   ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
   ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
 
@@ -645,9 +688,9 @@ begin
   end process;
 
 
-  process (clk56m)
+  process (clk86M)
   begin
-    if rising_edge(clk56m) then
+    if rising_edge(clk86M) then
       if cpuClk='1' then
         --if pllLocked='0' or status(0)='1' or status(2)='1' then
         if pllLocked='0' or reset='1' then
@@ -665,13 +708,13 @@ begin
   autores <= '1' when res_cnt="111111" else '0';
 
 
-  process (clk56m,dn_go,autores)
+  process (clk86M,dn_go,autores)
   begin
     if dn_go='1' or autores='0' then
       io_ram_addr <= x"010000"; -- above 64k
       iorrd_r<='0';
     else
-      if rising_edge(clk56m) then
+      if rising_edge(clk86M) then
         if cpuClk='1' then
           if iow='0' and cpua(7 downto 0)=x"ff" then
             tapebits <= cpudo(2 downto 0);
