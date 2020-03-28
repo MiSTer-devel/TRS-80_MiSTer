@@ -334,7 +334,7 @@ begin
       cpuClk <= '0';
       --if clk1774_div = 48 then
       --if clk1774_div = "110000" then
-      if clk1774_div = "101111" then
+      if clk1774_div = "010111" then
         cpuClk     <= '1';
         clk1774_div <= "000000";
       else
