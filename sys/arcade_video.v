@@ -12,7 +12,7 @@
 // 12 : 4R 4G 4B
 // 24 : 8R 8G 8B
 
-module arcade_video #(parameter WIDTH=320, HEIGHT=240/* can be 0 if no_rotate(1) */, DW=8, GAMMA=1)
+module arcade_video #(parameter WIDTH=320, HEIGHT=240, DW=8, GAMMA=1)
 (
 	input         clk_video,
 	input         ce_pix,
@@ -121,9 +121,9 @@ generate
 		wire [3:0] Br = RGB_out[3:0];
 	end
 	else begin // 24
-		wire [7:0] Rr = RGB_out;
-		wire [7:0] Gr = RGB_out;
-		wire [7:0] Br = RGB_out;
+		wire [7:0] Rr = RGB_out[23:16];
+		wire [7:0] Gr = RGB_out[15:8];
+		wire [7:0] Br = RGB_out[7:0];
 	end
 endgenerate
 
@@ -241,9 +241,9 @@ generate
 		assign VGA_B = {RGB_fix[3:0],RGB_fix[3:0]};
 	end
 	else begin // 24
-		assign VGA_R = RGB_fix;
-		assign VGA_G = RGB_fix;
-		assign VGA_B = RGB_fix;
+		assign VGA_R = RGB_fix[23:16];
+		assign VGA_G = RGB_fix[15:8];
+		assign VGA_B = RGB_fix[7:0];
 	end
 endgenerate
 
