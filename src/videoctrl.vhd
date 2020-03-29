@@ -435,7 +435,7 @@ signal vvga : std_logic;
 
 begin
 
-vvga <= '0';	
+vvga <= '1';	
 --pxclk <= clk10_5;
 --xpxclk <= clk10_5 when vcut='0' else clk5_25;
 --hstart <= conv_std_logic_vector(H_START,10);
@@ -497,20 +497,17 @@ end process;
 
 
 process(clk10_5)
-  variable vidmemval : std_logic_vector(7 downto 0);
-
 begin
   if rising_edge(clk10_5) then
   
-    vidmemval := vidmem(conv_integer( vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode) ));
+    chrCode <= vidmem(conv_integer( vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode) ));
 	 
-	 if (vidmemval < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
-		chrCode <= vidmemval + x"40";
+	 if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
+		chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
 	 else
-		chrCode <= vidmemval;
+		chrGrap <= chrmem(conv_integer( chrCode & vpos ));
 	 end if;
-
-	 chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+	 
 	 dout <= vidmem(conv_integer( a(9 downto 0) ));
 	 if cs='0' and wr='0' then
 	   vidmem(conv_integer( a(9 downto 0) )) <= din;
@@ -619,7 +616,7 @@ begin
 		  hsync <= '1';
 		end if;	
 		
-		if vctr<16 or vctr>257 then
+		if vctr<16 or vctr>259 then
 		  vblank <= '0';
 		else
 		  vblank <= '1';
@@ -628,7 +625,7 @@ begin
    end if;
 	
 
-	if vctr<2 then
+	if vctr<3 then
 	  vsync <= '0';
 	else
 	  vsync <= '1';
