@@ -121,6 +121,9 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign USER_OUT = '1;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign ADC_BUS  = 'Z;
+assign {SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 6'b111111;
+assign SDRAM_DQ = 'Z;
+
 
 //assign VIDEO_ARX = status[9] ? 8'd16 : 8'd4;
 //assign VIDEO_ARY = status[9] ? 8'd9  : 8'd3;
