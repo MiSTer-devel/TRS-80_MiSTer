@@ -49,25 +49,25 @@ entity videoctrl is
 		V_START : integer := 2+28+((266-192)/2)+4
 	 );
     Port (   
-	        reset : in  STD_LOGIC;
-		     clk42 : in  STD_LOGIC;
-			   --clk7 : in  STD_LOGIC;
+	   reset : in  STD_LOGIC;
+	   clk42 : in  STD_LOGIC;
+	   --clk7 : in  STD_LOGIC;
                a : in  STD_LOGIC_VECTOR (13 downto 0);
              din : in  STD_LOGIC_VECTOR (7 downto 0);
             dout : out STD_LOGIC_VECTOR (7 downto 0);
             mreq : in  STD_LOGIC;
             iorq : in  STD_LOGIC;
               wr : in  STD_LOGIC;
-				  cs : in  STD_LOGIC;
-				vcut : in  STD_LOGIC;
-				--vvga : in  STD_LOGIC;
-				page : in  STD_LOGIC;
-				inkp : in  STD_LOGIC;
-			 paperp : in  STD_LOGIC;
-			borderp : in  STD_LOGIC;
-		  widemode : in  STD_LOGIC;
-		 lcasetype : in  STD_LOGIC;
-			oddline : out STD_LOGIC;
+	      cs : in  STD_LOGIC;
+	    vcut : in  STD_LOGIC;
+          --vvga : in  STD_LOGIC;
+		page : in  STD_LOGIC;
+		inkp : in  STD_LOGIC;
+	 paperp : in  STD_LOGIC;
+	borderp : in  STD_LOGIC;
+	  widemode : in  STD_LOGIC;
+	 lcasetype : in  STD_LOGIC;
+	oddline : out STD_LOGIC;
             rgbi : out STD_LOGIC_VECTOR (3 downto 0);	
 				pclk : out STD_LOGIC;
            hsync : out STD_LOGIC;
@@ -77,7 +77,30 @@ entity videoctrl is
 			  );
 end videoctrl;
 
+
 architecture Behavioral of videoctrl is
+  component dpram is
+    generic (
+      DATA : integer;
+      ADDR : integer
+      );
+    port (
+      -- Port A
+      a_clk : in std_logic;
+      a_wr : in std_logic;
+      a_addr : in std_logic_vector(ADDR-1 downto 0);
+      a_din : in std_logic_vector(DATA-1 downto 0);
+      a_dout : out std_logic_vector(DATA-1 downto 0);
+
+      -- Port B
+      b_clk : in std_logic;
+      b_wr : in std_logic;
+      b_addr : in std_logic_vector(ADDR-1 downto 0);
+      b_din : in std_logic_vector(DATA-1 downto 0);
+      b_dout : out std_logic_vector(DATA-1 downto 0)
+      );
+  end component dpram;
+
 
 type videomem is array(0 to 1023) of std_logic_vector(7 downto 0);
 
@@ -86,6 +109,9 @@ type charmem is array(0 to 4095) of std_logic_vector(7 downto 0);
 signal vidmem : videomem:=(
 others => x"00"
 );
+
+
+
 
 signal chrmem : charmem:=(
  --[PATCH_START]
@@ -414,6 +440,7 @@ signal border : std_logic_vector(3 downto 0) := "0010";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
 signal  pixel : std_logic_vector(3 downto 0);
+signal  vid_addr : std_logic_vector(9 downto 0);
 
 signal screen : std_logic;
 signal hblank,vblank,blank : std_logic;
@@ -500,7 +527,7 @@ process(clk10_5)
 begin
   if rising_edge(clk10_5) then
   
-    chrCode <= vidmem(conv_integer( vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode) ));
+    --chrCode <= vidmem(conv_integer( vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode) ));
 	 
 	 if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
 		chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
@@ -508,12 +535,37 @@ begin
 		chrGrap <= chrmem(conv_integer( chrCode & vpos ));
 	 end if;
 	 
-	 dout <= vidmem(conv_integer( a(9 downto 0) ));
-	 if cs='0' and wr='0' then
-	   vidmem(conv_integer( a(9 downto 0) )) <= din;
-	 end if;
+	 --dout <= vidmem(conv_integer( a(9 downto 0) ));
+	 --if cs='0' and wr='0' then
+	 --  vidmem(conv_integer( a(9 downto 0) )) <= din;
+	 --end if;
   end if;  
 end process;
+
+
+vid_addr <=  vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode);
+  vram : dpram
+    generic map (
+      DATA => 8,
+      ADDR => 10
+      )
+    port map (
+      -- Port A
+      a_clk  => clk42,
+      a_wr   => not cs and not wr,
+      a_addr => a(9 downto 0),
+      a_din  => din,
+      a_dout => dout,
+
+      -- Port B
+      b_clk  => clk10_5,
+      b_wr   => '0',
+      b_addr => vid_addr,
+      b_din  => din,
+      b_dout => chrCode 
+      );
+
+
 
 -- h and v counters
 -- 10.5 MHz pixelclock => 672 pixels per scan line
