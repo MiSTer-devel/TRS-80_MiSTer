@@ -88,6 +88,7 @@ entity ht1080z is
     kybdlayout : in  STD_LOGIC;
     disp_color : in std_logic_vector(1 downto 0);
     lcasetype  : in STD_LOGIC;
+    overclock  : in STD_LOGIC_VECTOR(1 downto 0);
 
     pixel_clock: out STD_LOGIC;
 
@@ -278,7 +279,7 @@ architecture Behavioral of ht1080z is
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
-  signal clk1774_div : std_logic_vector(5 downto 0);
+  signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
   signal clk7_div : std_logic_vector(3 downto 0);
 
   signal sndBC1,sndBDIR,sndCLK : std_logic;
@@ -329,14 +330,20 @@ begin
     if rising_edge(clk42m) then
       clk7m <= '0';
       cpuClk <= '0';
-      --if clk1774_div = 48 then
-      --if clk1774_div = "110000" then
-      if clk1774_div = "010111" then
+
+		-- CPU clock divider
+		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
         cpuClk     <= '1';
-        clk1774_div <= "000000";
+		  case overclock(1 downto 0) is
+			 when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
+			 when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
+			 when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
+			 when "11" => clk1774_div <= "000010";  --   8x speed = 14.24 (42MHz /  3)
+        end case;
       else
-        clk1774_div <= clk1774_div + 1;
+        clk1774_div <= clk1774_div - 1;
       end if;
+      
 		
       --if clk7_div = 12 then
       --if clk7_div = "0110" then

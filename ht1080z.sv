@@ -150,6 +150,7 @@ localparam CONF_STR = {
         "O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
         "-;",
         "O4,Kbd Layout,TRS-80,PC;",
+        "O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),14.24(8x);",
         "-;",
         "R0,Reset;",
         "V,v",`BUILD_DATE
@@ -230,7 +231,7 @@ ht1080z ht1080z(
                 .kybdlayout(status[4]),
                 .disp_color(status[6:5]),
                 .lcasetype(status[7]),
-
+                .overclock(status[9:8]),
 
                 .dn_go(ioctl_download),
                 .dn_wr(ioctl_wr),
