@@ -492,8 +492,8 @@ begin
   sndBC1  <= cpua(0);
 
   with tapebits select speaker <=
-    "00100000" when "001",
-    "00010000" when "000"|"011",
+    "01000000" when "001",
+    "00100000" when "000"|"011",
     "00000000" when others;
 
   audiomix <= ('0' & oaudio) + ('0' & speaker);
