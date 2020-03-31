@@ -167,18 +167,23 @@ wire  [7:0] ioctl_index;
 
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
+wire [10:0] ps2_key_parallel;
+
 //wire [24:0] ps2_mouse;
 wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3) ), .PS2DIV(32)/*, .WIDE(0)*/) hps_io
+hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 (
         .clk_sys(/*CLK_VIDEO*/clk_sys),
         .HPS_BUS(HPS_BUS),
 
         .conf_str(CONF_STR),
+		  
+		  .ps2_key(ps2_key_parallel),
+		  
         .joystick_0(joystick_0),
         .joystick_1(joystick_1),
         .buttons(buttons),
@@ -193,10 +198,7 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) ), .PS2DIV(32)/*, .WIDE(0)*/) hps_io
         .ioctl_wr(ioctl_wr),
         .ioctl_addr(ioctl_addr),
         .ioctl_dout(ioctl_data),
-        .ioctl_index(ioctl_index),
-
-        .ps2_kbd_clk_out    ( ps2_kbd_clk    ),
-        .ps2_kbd_data_out   ( ps2_kbd_data   )
+        .ioctl_index(ioctl_index)
 );
 
 wire reset;
@@ -224,8 +226,7 @@ ht1080z ht1080z(
                 .LED(LED),
                 .audiomix(audiomix),
 
-                .ps2clk(ps2_kbd_clk),
-                .ps2dat(ps2_kbd_data),
+					 .ps2_key_parallel(ps2_key_parallel),
                 .kybdlayout(status[4]),
                 .disp_color(status[6:5]),
                 .lcasetype(status[7]),
@@ -234,7 +235,6 @@ ht1080z ht1080z(
                 .dn_go(ioctl_download),
                 .dn_wr(ioctl_wr),
                 .dn_addr(ioctl_addr_wide),
-                //.dn_addr(ioctl_index?{11'b00000000100,ioctl_addr}:{11'b00000000000,ioctl_addr}),
                 .dn_data(ioctl_data),
                 .dn_idx(ioctl_index),
 
@@ -249,10 +249,10 @@ wire [24:0] ioctl_addr_wide;
 // make sure we move the ioctl_address if we are loading a file
 
 always @(posedge clk_sys) begin
-        if (ioctl_index==8'b00000000)
-                ioctl_addr_wide <= {11'b00000000000,ioctl_addr};
-        else
-                ioctl_addr_wide <= {11'b00000000100,ioctl_addr};
+	if (ioctl_index==8'b00000000)									// IF BOOT.ROM
+		ioctl_addr_wide <= {11'b00000000000,ioctl_addr};	// Then load @ CPU-address 0x0000
+	else
+		ioctl_addr_wide <= {11'b00000000100,ioctl_addr};	// else load above CPU, @ address 0x10000
 end
 
 wire clk_vid;

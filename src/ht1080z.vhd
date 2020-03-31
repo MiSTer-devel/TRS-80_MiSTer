@@ -83,8 +83,8 @@ entity ht1080z is
     joy0 : in std_logic_vector(7 downto 0);
     joy1 : in std_logic_vector(7 downto 0);
 
-    ps2clk : in  STD_LOGIC;
-    ps2dat : in  STD_LOGIC;
+	 ps2_key_parallel : in STD_LOGIC_VECTOR(10 downto 0);
+	 
     kybdlayout : in  STD_LOGIC;
     disp_color : in std_logic_vector(1 downto 0);
     lcasetype  : in STD_LOGIC;
@@ -121,21 +121,6 @@ architecture Behavioral of ht1080z is
 
 
 
-  component spram is
-    generic (
-      data_width : integer;
-      addr_width : integer
-      );
-    port (
-      clock : in std_logic;
-      wren : in std_logic;
-      address : in std_logic_vector(addr_width-1 downto 0);
-      data : in std_logic_vector(data_width-1 downto 0);
-      q : out std_logic_vector(data_width-1 downto 0);
-      cs : in std_logic
-      );
-  end component spram;
-
   component dpram is
     generic (
       DATA : integer;
@@ -158,6 +143,20 @@ architecture Behavioral of ht1080z is
       );
   end component dpram;
 
+  component keyboard is
+    port  (
+      reset		: in std_logic;
+      clk_sys	: in std_logic;
+
+      ps2_key	: in std_logic_vector(10 downto 0);
+		addr		: in std_logic_vector(7 downto 0);
+		key_data	: out std_logic_vector(7 downto 0);
+      kblayout	: in std_logic;
+
+		Fn			: out std_logic_vector(11 downto 1);
+		modif		: out std_logic_vector(2 downto 0)
+      );
+	end component keyboard;
 
 --component osd
 --  generic ( OSD_COLOR : integer );
@@ -240,10 +239,6 @@ architecture Behavioral of ht1080z is
 
 
   signal pvsel : std_logic;
---signal ps2clkout : std_logic;
-
---signal PS2CLK : std_logic;
---signal PS2DAT : std_logic;
 
   signal MPS2CLK : std_logic;
   signal MPS2DAT : std_logic;
@@ -270,6 +265,9 @@ architecture Behavioral of ht1080z is
   signal hs,vs : std_logic;
   signal romdo,vramdo,ramdo,ramHdo,kbdout : std_logic_vector(7 downto 0);
   signal vramcs : std_logic;
+
+  signal Fn : std_logic_vector(11 downto 0);
+  signal modif : std_logic_vector(2 downto 0);
 
   signal page,vcut,swres : std_logic;
 
@@ -330,7 +328,6 @@ begin
   begin
     if rising_edge(clk42m) then
       clk7m <= '0';
-      --ps2clkout <= '0';
       cpuClk <= '0';
       --if clk1774_div = 48 then
       --if clk1774_div = "110000" then
@@ -340,6 +337,7 @@ begin
       else
         clk1774_div <= clk1774_div + 1;
       end if;
+		
       --if clk7_div = 12 then
       --if clk7_div = "0110" then
       if clk7_div = "0101" then
@@ -443,22 +441,19 @@ begin
 --  hsync <= hs xor (not vs);
 --  vsync <= '1';
 
-  kbd : entity work.ps2kbd
+
+  kbdpar : keyboard
     port  map (
-      RESET => not pllLocked,
-      KBCLK => ps2clk,
-      KBDAT => ps2dat,
-      KBLAYOUT => kybdlayout,
-      SWRES => swres,
-      CLK => clk42m,
-      CLK_en => clk7m,
-      A => cpua(7 downto 0),
-      DOUT => kbdout,
-      PAGE => page,
-      VCUT => vcut,
-      INKP => inkpulse,
-      PAPERP => paperpulse,
-      BORDERP => borderpulse
+      reset	=> not autores,
+      clk_sys => clk_download,
+
+      ps2_key => ps2_key_parallel,
+		addr	=> cpua(7 downto 0),
+		key_data => kbdout,
+      kblayout => kybdlayout,
+
+		Fn => Fn(11 downto 1),
+		modif => modif
       );
 
   -- PSG
