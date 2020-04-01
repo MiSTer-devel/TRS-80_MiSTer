@@ -303,16 +303,14 @@ architecture Behavioral of ht1080z is
   alias tapemotor : std_logic is tapebits(2);
 
   signal  speaker : std_logic_vector(7 downto 0);
-  signal vga : std_logic := '1';
-  signal scanlines : std_logic;
-  signal oddline : std_logic;
+  signal vga : std_logic := '0';
 
   signal inkpulse, paperpulse, borderpulse : std_logic;
   signal widemode : std_logic := '0';
 
 begin
 
-  led <= tapemotor; -- not scanlines; --not dn_go;--swres;
+  led <= tapemotor;
 
   -- generate system clocks
   --clkmgr : entity work.pll
@@ -402,13 +400,13 @@ begin
            vramdo when vramsel='1' else
            kbdout when kbdsel='1' else
            x"30" when ior='0' and cpua(7 downto 0)=x"fd" else -- printer io read
+           x"ff" when ior='0' and cpua(7 downto 0)=x"13" else -- trisstick
            --ram_dout when iorrd='1' else
            --x"ff";
            ram_dout;
 
   pvsel <='0' ;
   vga <= not pvsel;
---  vdata <= cpudo when cpudo>x"1f" else cpudo or x"40";	-- This forces video memory to uppercase values when written to by values < 0x20
   vdata <= cpudo;
 
   -- video ram at 0x3C00
@@ -424,8 +422,6 @@ begin
       iorq => cpuiorq,
       wr => cpuwr,
       cs => not vramsel,
-      vcut => vcut,
-      --vvga => vga,
       page => page,
       rgbi => rgbi,
       pclk => pclk,
@@ -434,7 +430,6 @@ begin
       borderp => borderpulse,
       widemode => widemode,
       lcasetype => lcasetype,
-      oddline => oddline,
       hsync => hs,
       vsync => vs,
       hb => hblank,
@@ -495,6 +490,7 @@ begin
       RESET_L    => autores,--swres and pllLocked,
       CLK        => clk42m
       );
+
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
 
@@ -570,8 +566,6 @@ begin
     "111110111110111110";
 
 
-  scanlines <= status(1) and vga and oddline;
-
 --  userio: user_io
 --   generic map (STRLEN => CONF_STR'length)
 -- -  port map (
@@ -621,9 +615,9 @@ begin
   out_RGB<=ht_rgb;
 
 
-  RGB(17 downto 12) <= out_RGB(17 downto 12) when scanlines='0' else "0" & out_RGB(17 downto 13);
-  RGB(11 downto  6) <= out_RGB(11 downto  6) when scanlines='0' else "0" & out_RGB(11 downto  7);
-  RGB( 5 downto  0) <= out_RGB( 5 downto  0) when scanlines='0' else "0" & out_RGB( 5 downto  1);
+  RGB(17 downto 12) <= out_RGB(17 downto 12);
+  RGB(11 downto  6) <= out_RGB(11 downto  6);
+  RGB( 5 downto  0) <= out_RGB( 5 downto  0);
 
 
   main_mem : dpram

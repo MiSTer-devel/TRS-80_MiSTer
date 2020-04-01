@@ -45,8 +45,8 @@ use IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity videoctrl is
 	Generic (
-		H_START : integer := 42+84+81-16;
-		V_START : integer := 2+28+((266-192)/2)+4
+		H_START : integer := 42+84+81-5;
+		V_START : integer := 2+28+((264-192)/2)+4
 	 );
     Port (   
 	   reset : in  STD_LOGIC;
@@ -59,15 +59,12 @@ entity videoctrl is
             iorq : in  STD_LOGIC;
               wr : in  STD_LOGIC;
 	      cs : in  STD_LOGIC;
-	    vcut : in  STD_LOGIC;
-          --vvga : in  STD_LOGIC;
 		page : in  STD_LOGIC;
 		inkp : in  STD_LOGIC;
 	 paperp : in  STD_LOGIC;
 	borderp : in  STD_LOGIC;
 	  widemode : in  STD_LOGIC;
 	 lcasetype : in  STD_LOGIC;
-	oddline : out STD_LOGIC;
             rgbi : out STD_LOGIC_VECTOR (3 downto 0);	
 				pclk : out STD_LOGIC;
            hsync : out STD_LOGIC;
@@ -102,14 +99,7 @@ architecture Behavioral of videoctrl is
   end component dpram;
 
 
-type videomem is array(0 to 1023) of std_logic_vector(7 downto 0);
-
 type charmem is array(0 to 4095) of std_logic_vector(7 downto 0);
-
-signal vidmem : videomem:=(
-others => x"00"
-);
-
 
 
 
@@ -458,28 +448,17 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
-signal vvga : std_logic;
 
 begin
 
-vvga <= '1';	
---pxclk <= clk10_5;
---xpxclk <= clk10_5 when vcut='0' else clk5_25;
---hstart <= conv_std_logic_vector(H_START,10);
---vstart <= conv_std_logic_vector(V_START,9); 
---vend <= conv_std_logic_vector(311,9); 
 
-pxclk <= clk10_5 when vvga='0' else clk21;
-xpxsel <= vvga & vcut;
-with xpxsel select xpxclk <=
-  clk10_5 when "00",
-  clk5_25 when "01",
-    clk21 when "10",
-  clk10_5 when others;
+pxclk <= clk10_5;
 
-hstart <= conv_std_logic_vector(H_START,10) when vvga='0' else conv_std_logic_vector(H_START,10);
-vstart <= conv_std_logic_vector(V_START,9) when vvga='0' else conv_std_logic_vector(V_START-30,9);
-vend <= conv_std_logic_vector(311,9) when vvga='0' else conv_std_logic_vector(262,9); 
+xpxclk <= clk10_5;
+
+hstart <= conv_std_logic_vector(H_START,10);
+vstart <= conv_std_logic_vector(36,9);
+vend <= conv_std_logic_vector(264,9);
 
 process(clk42)
 begin
@@ -527,18 +506,12 @@ process(clk10_5)
 begin
   if rising_edge(clk10_5) then
   
-    --chrCode <= vidmem(conv_integer( vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode) ));
-	 
 	 if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
 		chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
 	 else
 		chrGrap <= chrmem(conv_integer( chrCode & vpos ));
 	 end if;
 	 
-	 --dout <= vidmem(conv_integer( a(9 downto 0) ));
-	 --if cs='0' and wr='0' then
-	 --  vidmem(conv_integer( a(9 downto 0) )) <= din;
-	 --end if;
   end if;  
 end process;
 
@@ -569,7 +542,7 @@ vid_addr <=  vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode);
 
 -- h and v counters
 -- 10.5 MHz pixelclock => 672 pixels per scan line
--- 312 scanlines
+-- 264 scanlines
 -- 64*6 pixels active screen = 384 pixels
 -- visible area: 52*10.5 = 546
 -- Horizontal: |42T-hsync|84T-porch|81T-border|384T-screen|81T-border|
@@ -583,10 +556,7 @@ begin
 		   vctr<="000000000";
 			v1 <= '0';
 		 else
-			--vctr<=vctr+1;
-			if v1='1' or vvga='0' then 
-			  vctr<=vctr+1;
-			end if; 
+		   vctr<=vctr+1;
 		 end if;
 	  else
 	    hctr<=hctr+1;
@@ -594,88 +564,29 @@ begin
   end if;
 end process;
 
---process(pxclk)
---begin
--- if falling_edge(pxclk) then
---	
---	-- 12*10.5
---	if hctr<126 or hctr>654 then
---	  hblank <= '0';
---	else
---	  hblank <= '1';
---	end if;
---	
---	if hctr<42 then -- 4*10.5
---	  hsync <= '0';
---	else
---	  hsync <= '1';
---	end if;
---	
---	if vctr<6 or vctr>309 then
---	  vblank <= '0';
---	else
---	  vblank <= '1';
---	end if;
---
---	if vctr<2 then
---	  vsync <= '0';
---	else
---	  vsync <= '1';
---	end if;
---		
--- end if;	 	 
---end process;
 
 process(pxclk)
 begin
  if falling_edge(pxclk) then
-	
-	if vvga='0' then
-		-- 12*10.5
-		if hctr<126 or hctr>654 then
-		  hblank <= '0';
-		else
-		  hblank <= '1';
-		end if;
+
+	-- 12*10.5
+	if hctr<126 or hctr>662 then
+	  hblank <= '0';
 	else
-	   -- VGA 6us
-		-- 
-		--if hctr<64 or hctr>662 then
-		if hctr<120 or hctr>654 then
-		  hblank <= '0';
-		else
-		  hblank <= '1';
-		end if;	
+	  hblank <= '1';
 	end if;
 	
-	if vvga='0' then	
-		if hctr<42 then -- 4*10.5
-		  hsync <= '0';
-		else
-		  hsync <= '1';
-		end if;
+	if hctr<42 then -- 4*10.5
+	  hsync <= '0';
+	else
+	  hsync <= '1';
+	end if;
 		
-		if vctr<6 or vctr>309 then
-		  vblank <= '0';
-		else
-		  vblank <= '1';
-		end if;
-
-   else
-		if hctr<79 then -- 4*21
-		  hsync <= '0';
-		else
-		  hsync <= '1';
-		end if;	
-		
-		if vctr<16 or vctr>259 then
-		  vblank <= '0';
-		else
-		  vblank <= '1';
-		end if;
-		
-   end if;
-	
+	if vctr<4 or vctr>263 then
+	  vblank <= '0';
+	else
+	  vblank <= '1';
+	end if;
 
 	if vctr<3 then
 	  vsync <= '0';
@@ -712,13 +623,14 @@ begin
 	 else
 	   screen<= '0';
 		hpos <= "101";
-		vaHoriz <= (page and vcut) & "00000"; 
+		vaHoriz <= "000000"; 
 		shiftReg <= "00000000"; -- keep it clear
 		if vctr=0 then
 		  -- new frame
 		  vaVert<= "0000";
 		  vpos <= "0000";
-		elsif vact='1' and hctr=hstart+384+2 and (v1='1' or vvga='0') then
+
+		elsif vact='1' and hctr=hstart+384+2 then
 		  -- end of a scanline
 		  if vpos=11 then
 		    vpos <= "0000";
@@ -736,8 +648,8 @@ blank <= hblank and vblank;
 hb <= hblank;
 vb <= vblank;
 rgbi <= pixel when blank='1' else "0000";
-pclk <= clk10_5 when vvga='0' else clk21;
-oddline <= v1;
+
+pclk <= clk10_5;
 
 end Behavioral;
 
