@@ -125,9 +125,6 @@ assign {SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_n
 assign SDRAM_DQ = 'Z;
 
 
-//assign VIDEO_ARX = status[9] ? 8'd16 : 8'd4;
-//assign VIDEO_ARY = status[9] ? 8'd9  : 8'd3;
-
 assign BUTTONS = 0;
 
 assign VIDEO_ARX = 4;
@@ -178,7 +175,7 @@ wire [15:0] joystick_0, joystick_1;
 
 hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 (
-        .clk_sys(/*CLK_VIDEO*/clk_sys),
+        .clk_sys(clk_sys),
         .HPS_BUS(HPS_BUS),
 
         .conf_str(CONF_STR),

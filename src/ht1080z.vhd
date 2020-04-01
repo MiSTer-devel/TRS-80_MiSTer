@@ -159,46 +159,6 @@ architecture Behavioral of ht1080z is
       );
 	end component keyboard;
 
---component osd
---  generic ( OSD_COLOR : integer );
-  -- port ( pclk                        : in std_logic;
---		sck, sdi, ss    : in std_logic;
-
-  -- VGA signals coming from core
-  --    red_in                  : in std_logic_vector(5 downto 0);
-  --    green_in                : in std_logic_vector(5 downto 0);
-  --    blue_in                         : in std_logic_vector(5 downto 0);
-  --    hs_in                   : in std_logic;
-  --    vs_in                   : in std_logic;
-
-  -- VGA signals going to video connector
-  --   red_out                  : out std_logic_vector(5 downto 0);
-  --   green_out                : out std_logic_vector(5 downto 0);
-  --   blue_out                 : out std_logic_vector(5 downto 0);
-  --   hs_out                   : out std_logic;
-  --   vs_out                   : out std_logic
-  --);
---end component osd;
-
---component user_io
-  --   generic ( STRLEN : integer := 0 );
-  --    port (
-  -- ps2 interface
-  --		SPI_CLK, SPI_SS_IO, SPI_MOSI :in std_logic;
-  --     SPI_MISO : out std_logic;
-  --      conf_str : in std_logic_vector(8*STRLEN-1 downto 0);
-  --       joystick_0 : out std_logic_vector(7 downto 0);
-  --        joystick_1 : out std_logic_vector(7 downto 0);
---			status: out std_logic_vector(7 downto 0);
---			ps2_clk        : in std_LOGIC;
---			ps2_kbd_clk    : out std_logic;
---			ps2_kbd_data   : out std_logic;
---			ps2_mouse_clk  : out std_logic;
---			ps2_mouse_data : out std_logic;
---			scandoubler_disable : out std_logic
-  --     );
---end component user_io;
-
 
   function to_slv(s: string) return std_logic_vector is
     constant ss: string(1 to s'length) := s;
@@ -224,12 +184,6 @@ architecture Behavioral of ht1080z is
   signal ram_we: std_logic;
   signal ram_oe: std_logic;
 
-
---signal   dn_go : std_logic;
---signal   dn_wr : std_logic;
---signal dn_addr : std_logic_vector(24 downto 0);
---signal dn_data : std_logic_vector(7 downto 0);
---signal  dn_idx : std_logic_vector(4 downto 0);
 
   signal   dn_wr_r : std_logic;
   signal dn_addr_r : std_logic_vector(24 downto 0);
@@ -312,16 +266,6 @@ begin
 
   led <= tapemotor;
 
-  -- generate system clocks
-  --clkmgr : entity work.pll
-  -- port map (
---        inclk0 => CLK27M,
---        c0 => clk56M,
---        c1 => SDRAM_CLK,
---        c2 => clk42m,
---        locked => pllLocked
---	);
-
 
   process(clk42m)
   begin
@@ -353,8 +297,6 @@ begin
       end if;
     end if;
   end process;
-  --clk7m <= clk56div(2);
-  --ps2clkout  <= clk56div(11);
 
   ior <= cpurd or cpuiorq or (not cpum1);
   iow <= cpuwr or cpuiorq;
@@ -368,8 +310,6 @@ begin
   kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
   iorrd <= '1' when ior='0' and cpua(7 downto 0)=x"04" else '0'; -- in 04
 
-  --cpuClk <= clk56div(4);
-  --clk_download <= clk56div(3);
 
   cpu : entity work.T80se
     port map (
@@ -393,15 +333,10 @@ begin
       DO      => cpudo
       );
 
-  cpudi <= --romdo when romrd='1' else
-           --ramdo when ramrd='1' else
-           --ram_dout when romrd='1' else
-           --ram_dout when ramrd='1' else
-           vramdo when vramsel='1' else
+  cpudi <= vramdo when vramsel='1' else
            kbdout when kbdsel='1' else
            x"30" when ior='0' and cpua(7 downto 0)=x"fd" else -- printer io read
            x"ff" when ior='0' and cpua(7 downto 0)=x"13" else -- trisstick
-           --ram_dout when iorrd='1' else
            --x"ff";
            ram_dout;
 
@@ -566,52 +501,6 @@ begin
     "111110111110111110";
 
 
---  userio: user_io
---   generic map (STRLEN => CONF_STR'length)
--- -  port map (
-
---         conf_str => to_slv(CONF_STR),
---
---		SPI_CLK   => SPI_SCK    ,
-  --     SPI_SS_IO => CONF_DATA0 ,
-  --    SPI_MISO  => SPI_DO     ,
-  --    SPI_MOSI  => SPI_DI     ,
-
---		status     => status     ,
-
-  -- ps2 interface
---		ps2_clk        => ps2clkout,
---		ps2_kbd_clk    => ps2CLK,
---		ps2_kbd_data   => ps2DAT,
---		ps2_mouse_clk  => mps2CLK,
---		ps2_mouse_data => mps2DAT,
-
---		joystick_0 => joy0,
-  --     joystick_1 => joy1,
-
---		scandoubler_disable => pvsel
---	);
-
---osd_d : osd
---	generic map (OSD_COLOR => 6)
---	port map (
---		pclk => pclk,
-  --     sck => SPI_SCK,
-  --     ss => SPI_SS3,
-  --    sdi => SPI_DI,
-
-  --   red_in => ht_rgb(5 downto 0),
-  --  green_in => ht_rgb(11 downto 6),
-  --     blue_in => ht_rgb(17 downto 12),
-  ---     hs_in => hs,
-  --     vs_in => vs,
-
-  --     red_out => out_RGB(17 downto 12),
-  --     green_out => out_RGB(11 downto 6),
-  --     blue_out => out_RGB(5 downto 0),
---		hs_out => open, --HSYNC,
---		vs_out => open --VSYNC
---);
   out_RGB<=ht_rgb;
 
 
@@ -641,33 +530,13 @@ begin
       b_dout => ram_dout
       );
 
-    --ram_addr <= "000000000" & cpua when dn_go='0' else dn_addr_r;
 
   ram_din <= cpudo when dn_go='0' else dn_data_r;
-  --ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r;
+
   ram_we <= ((not memw) and (cpua(15) or cpua(14))) and not dn_go and cpuClkEn;
-  --ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
+
   ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
   ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
-
-
-  -- dataio : data_io
-  --   port map (
---         sck  =>      SPI_SCK,
---		ss    =>        SPI_SS2,
---		sdi	=>		SPI_DI,
-
---		downloading => dn_go,
-  --size        => ioctl_size,
---		index       => dn_idx,
-
-  -- ram interface
---		clk     =>      clk_download, -- ???
---		wr    =>    dn_wr,
---		addr  =>		dn_addr,
---		data  =>		dn_data
---       );
-
 
 
   process(clk_download)
