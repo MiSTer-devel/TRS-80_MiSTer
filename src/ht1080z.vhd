@@ -83,11 +83,12 @@ entity ht1080z is
     joy0 : in std_logic_vector(7 downto 0);
     joy1 : in std_logic_vector(7 downto 0);
 
-    ps2clk : in  STD_LOGIC;
-    ps2dat : in  STD_LOGIC;
+	 ps2_key_parallel : in STD_LOGIC_VECTOR(10 downto 0);
+	 
     kybdlayout : in  STD_LOGIC;
     disp_color : in std_logic_vector(1 downto 0);
     lcasetype  : in STD_LOGIC;
+    overclock  : in STD_LOGIC_VECTOR(1 downto 0);
 
     pixel_clock: out STD_LOGIC;
 
@@ -121,21 +122,6 @@ architecture Behavioral of ht1080z is
 
 
 
-  component spram is
-    generic (
-      data_width : integer;
-      addr_width : integer
-      );
-    port (
-      clock : in std_logic;
-      wren : in std_logic;
-      address : in std_logic_vector(addr_width-1 downto 0);
-      data : in std_logic_vector(data_width-1 downto 0);
-      q : out std_logic_vector(data_width-1 downto 0);
-      cs : in std_logic
-      );
-  end component spram;
-
   component dpram is
     generic (
       DATA : integer;
@@ -158,46 +144,20 @@ architecture Behavioral of ht1080z is
       );
   end component dpram;
 
+  component keyboard is
+    port  (
+      reset		: in std_logic;
+      clk_sys	: in std_logic;
 
---component osd
---  generic ( OSD_COLOR : integer );
-  -- port ( pclk                        : in std_logic;
---		sck, sdi, ss    : in std_logic;
+      ps2_key	: in std_logic_vector(10 downto 0);
+		addr		: in std_logic_vector(7 downto 0);
+		key_data	: out std_logic_vector(7 downto 0);
+      kblayout	: in std_logic;
 
-  -- VGA signals coming from core
-  --    red_in                  : in std_logic_vector(5 downto 0);
-  --    green_in                : in std_logic_vector(5 downto 0);
-  --    blue_in                         : in std_logic_vector(5 downto 0);
-  --    hs_in                   : in std_logic;
-  --    vs_in                   : in std_logic;
-
-  -- VGA signals going to video connector
-  --   red_out                  : out std_logic_vector(5 downto 0);
-  --   green_out                : out std_logic_vector(5 downto 0);
-  --   blue_out                 : out std_logic_vector(5 downto 0);
-  --   hs_out                   : out std_logic;
-  --   vs_out                   : out std_logic
-  --);
---end component osd;
-
---component user_io
-  --   generic ( STRLEN : integer := 0 );
-  --    port (
-  -- ps2 interface
-  --		SPI_CLK, SPI_SS_IO, SPI_MOSI :in std_logic;
-  --     SPI_MISO : out std_logic;
-  --      conf_str : in std_logic_vector(8*STRLEN-1 downto 0);
-  --       joystick_0 : out std_logic_vector(7 downto 0);
-  --        joystick_1 : out std_logic_vector(7 downto 0);
---			status: out std_logic_vector(7 downto 0);
---			ps2_clk        : in std_LOGIC;
---			ps2_kbd_clk    : out std_logic;
---			ps2_kbd_data   : out std_logic;
---			ps2_mouse_clk  : out std_logic;
---			ps2_mouse_data : out std_logic;
---			scandoubler_disable : out std_logic
-  --     );
---end component user_io;
+		Fn			: out std_logic_vector(11 downto 1);
+		modif		: out std_logic_vector(2 downto 0)
+      );
+	end component keyboard;
 
 
   function to_slv(s: string) return std_logic_vector is
@@ -225,12 +185,6 @@ architecture Behavioral of ht1080z is
   signal ram_oe: std_logic;
 
 
---signal   dn_go : std_logic;
---signal   dn_wr : std_logic;
---signal dn_addr : std_logic_vector(24 downto 0);
---signal dn_data : std_logic_vector(7 downto 0);
---signal  dn_idx : std_logic_vector(4 downto 0);
-
   signal   dn_wr_r : std_logic;
   signal dn_addr_r : std_logic_vector(24 downto 0);
   signal dn_data_r : std_logic_vector(7 downto 0);
@@ -240,10 +194,6 @@ architecture Behavioral of ht1080z is
 
 
   signal pvsel : std_logic;
---signal ps2clkout : std_logic;
-
---signal PS2CLK : std_logic;
---signal PS2DAT : std_logic;
 
   signal MPS2CLK : std_logic;
   signal MPS2DAT : std_logic;
@@ -271,6 +221,9 @@ architecture Behavioral of ht1080z is
   signal romdo,vramdo,ramdo,ramHdo,kbdout : std_logic_vector(7 downto 0);
   signal vramcs : std_logic;
 
+  signal Fn : std_logic_vector(11 downto 0);
+  signal modif : std_logic_vector(2 downto 0);
+
   signal page,vcut,swres : std_logic;
 
   signal romrd,ramrd,ramwr,vramsel,kbdsel : std_logic;
@@ -280,7 +233,7 @@ architecture Behavioral of ht1080z is
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
-  signal clk1774_div : std_logic_vector(5 downto 0);
+  signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
   signal clk7_div : std_logic_vector(3 downto 0);
 
   signal sndBC1,sndBDIR,sndCLK : std_logic;
@@ -304,42 +257,36 @@ architecture Behavioral of ht1080z is
   alias tapemotor : std_logic is tapebits(2);
 
   signal  speaker : std_logic_vector(7 downto 0);
-  signal vga : std_logic := '1';
-  signal scanlines : std_logic;
-  signal oddline : std_logic;
+  signal vga : std_logic := '0';
 
   signal inkpulse, paperpulse, borderpulse : std_logic;
   signal widemode : std_logic := '0';
 
 begin
 
-  led <= tapemotor; -- not scanlines; --not dn_go;--swres;
-
-  -- generate system clocks
-  --clkmgr : entity work.pll
-  -- port map (
---        inclk0 => CLK27M,
---        c0 => clk56M,
---        c1 => SDRAM_CLK,
---        c2 => clk42m,
---        locked => pllLocked
---	);
+  led <= tapemotor;
 
 
   process(clk42m)
   begin
     if rising_edge(clk42m) then
       clk7m <= '0';
-      --ps2clkout <= '0';
       cpuClk <= '0';
-      --if clk1774_div = 48 then
-      --if clk1774_div = "110000" then
-      if clk1774_div = "010111" then
+
+		-- CPU clock divider
+		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
         cpuClk     <= '1';
-        clk1774_div <= "000000";
+		  case overclock(1 downto 0) is
+			 when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
+			 when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
+			 when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
+			 when "11" => clk1774_div <= "000010";  --   8x speed = 14.24 (42MHz /  3)
+        end case;
       else
-        clk1774_div <= clk1774_div + 1;
+        clk1774_div <= clk1774_div - 1;
       end if;
+      
+		
       --if clk7_div = 12 then
       --if clk7_div = "0110" then
       if clk7_div = "0101" then
@@ -350,8 +297,6 @@ begin
       end if;
     end if;
   end process;
-  --clk7m <= clk56div(2);
-  --ps2clkout  <= clk56div(11);
 
   ior <= cpurd or cpuiorq or (not cpum1);
   iow <= cpuwr or cpuiorq;
@@ -365,8 +310,6 @@ begin
   kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
   iorrd <= '1' when ior='0' and cpua(7 downto 0)=x"04" else '0'; -- in 04
 
-  --cpuClk <= clk56div(4);
-  --clk_download <= clk56div(3);
 
   cpu : entity work.T80se
     port map (
@@ -390,20 +333,15 @@ begin
       DO      => cpudo
       );
 
-  cpudi <= --romdo when romrd='1' else
-           --ramdo when ramrd='1' else
-           --ram_dout when romrd='1' else
-           --ram_dout when ramrd='1' else
-           vramdo when vramsel='1' else
+  cpudi <= vramdo when vramsel='1' else
            kbdout when kbdsel='1' else
            x"30" when ior='0' and cpua(7 downto 0)=x"fd" else -- printer io read
-           --ram_dout when iorrd='1' else
+           x"ff" when ior='0' and cpua(7 downto 0)=x"13" else -- trisstick
            --x"ff";
            ram_dout;
 
   pvsel <='0' ;
   vga <= not pvsel;
---  vdata <= cpudo when cpudo>x"1f" else cpudo or x"40";	-- This forces video memory to uppercase values when written to by values < 0x20
   vdata <= cpudo;
 
   -- video ram at 0x3C00
@@ -419,8 +357,6 @@ begin
       iorq => cpuiorq,
       wr => cpuwr,
       cs => not vramsel,
-      vcut => vcut,
-      --vvga => vga,
       page => page,
       rgbi => rgbi,
       pclk => pclk,
@@ -429,7 +365,6 @@ begin
       borderp => borderpulse,
       widemode => widemode,
       lcasetype => lcasetype,
-      oddline => oddline,
       hsync => hs,
       vsync => vs,
       hb => hblank,
@@ -443,22 +378,19 @@ begin
 --  hsync <= hs xor (not vs);
 --  vsync <= '1';
 
-  kbd : entity work.ps2kbd
+
+  kbdpar : keyboard
     port  map (
-      RESET => not pllLocked,
-      KBCLK => ps2clk,
-      KBDAT => ps2dat,
-      KBLAYOUT => kybdlayout,
-      SWRES => swres,
-      CLK => clk42m,
-      CLK_en => clk7m,
-      A => cpua(7 downto 0),
-      DOUT => kbdout,
-      PAGE => page,
-      VCUT => vcut,
-      INKP => inkpulse,
-      PAPERP => paperpulse,
-      BORDERP => borderpulse
+      reset	=> not autores,
+      clk_sys => clk_download,
+
+      ps2_key => ps2_key_parallel,
+		addr	=> cpua(7 downto 0),
+		key_data => kbdout,
+      kblayout => kybdlayout,
+
+		Fn => Fn(11 downto 1),
+		modif => modif
       );
 
   -- PSG
@@ -493,12 +425,13 @@ begin
       RESET_L    => autores,--swres and pllLocked,
       CLK        => clk42m
       );
+
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
 
   with tapebits select speaker <=
-    "00100000" when "001",
-    "00010000" when "000"|"011",
+    "01000000" when "001",
+    "00100000" when "000"|"011",
     "00000000" when others;
 
   audiomix <= ('0' & oaudio) + ('0' & speaker);
@@ -568,60 +501,12 @@ begin
     "111110111110111110";
 
 
-  scanlines <= status(1) and vga and oddline;
-
---  userio: user_io
---   generic map (STRLEN => CONF_STR'length)
--- -  port map (
-
---         conf_str => to_slv(CONF_STR),
---
---		SPI_CLK   => SPI_SCK    ,
-  --     SPI_SS_IO => CONF_DATA0 ,
-  --    SPI_MISO  => SPI_DO     ,
-  --    SPI_MOSI  => SPI_DI     ,
-
---		status     => status     ,
-
-  -- ps2 interface
---		ps2_clk        => ps2clkout,
---		ps2_kbd_clk    => ps2CLK,
---		ps2_kbd_data   => ps2DAT,
---		ps2_mouse_clk  => mps2CLK,
---		ps2_mouse_data => mps2DAT,
-
---		joystick_0 => joy0,
-  --     joystick_1 => joy1,
-
---		scandoubler_disable => pvsel
---	);
-
---osd_d : osd
---	generic map (OSD_COLOR => 6)
---	port map (
---		pclk => pclk,
-  --     sck => SPI_SCK,
-  --     ss => SPI_SS3,
-  --    sdi => SPI_DI,
-
-  --   red_in => ht_rgb(5 downto 0),
-  --  green_in => ht_rgb(11 downto 6),
-  --     blue_in => ht_rgb(17 downto 12),
-  ---     hs_in => hs,
-  --     vs_in => vs,
-
-  --     red_out => out_RGB(17 downto 12),
-  --     green_out => out_RGB(11 downto 6),
-  --     blue_out => out_RGB(5 downto 0),
---		hs_out => open, --HSYNC,
---		vs_out => open --VSYNC
---);
   out_RGB<=ht_rgb;
 
 
-  RGB(17 downto 12) <= out_RGB(17 downto 12) when scanlines='0' else "0" & out_RGB(17 downto 13);
-  RGB(11 downto  6) <= out_RGB(11 downto  6) when scanlines='0' else "0" & out_RGB(11 downto  7);
-  RGB( 5 downto  0) <= out_RGB( 5 downto  0) when scanlines='0' else "0" & out_RGB( 5 downto  1);
+  RGB(17 downto 12) <= out_RGB(17 downto 12);
+  RGB(11 downto  6) <= out_RGB(11 downto  6);
+  RGB( 5 downto  0) <= out_RGB( 5 downto  0);
 
 
   main_mem : dpram
@@ -645,33 +530,13 @@ begin
       b_dout => ram_dout
       );
 
-    --ram_addr <= "000000000" & cpua when dn_go='0' else dn_addr_r;
 
   ram_din <= cpudo when dn_go='0' else dn_data_r;
-  --ram_we <= ((not memw) and (cpua(15) or cpua(14))) when dn_go='0' else dn_wr_r;
+
   ram_we <= ((not memw) and (cpua(15) or cpua(14))) and not dn_go and cpuClkEn;
-  --ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
+
   ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
   ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
-
-
-  -- dataio : data_io
-  --   port map (
---         sck  =>      SPI_SCK,
---		ss    =>        SPI_SS2,
---		sdi	=>		SPI_DI,
-
---		downloading => dn_go,
-  --size        => ioctl_size,
---		index       => dn_idx,
-
-  -- ram interface
---		clk     =>      clk_download, -- ???
---		wr    =>    dn_wr,
---		addr  =>		dn_addr,
---		data  =>		dn_data
---       );
-
 
 
   process(clk_download)
