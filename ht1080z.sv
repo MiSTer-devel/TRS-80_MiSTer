@@ -262,6 +262,13 @@ assign CLK_VIDEO = clk42m;
 //wire clk_sys, clk_ram, clk_ram2, clk_pixel, locked;
 //
 wire [2:0] scale = status[3:1];
+wire [1:0] scanlines;
+
+assign scanlines =   (status[3:1] == 0) ? 0 :
+							(status[3:1] == 1) ? 0 :
+							(status[3:1] == 2) ? 1 :
+							(status[3:1] == 3) ? 2 : 3;
+
 
 //video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 //video_mixer #(.LINE_LENGTH(384), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
@@ -273,7 +280,7 @@ video_mixer #(.GAMMA(1)) video_mixer
         .ce_pix(clk_vid),
         .ce_pix_out(CE_PIXEL),
 
-        .scanlines(0),
+        .scanlines(scanlines),
         //.scandoubler(  scale || forced_scandoubler),
         .scandoubler(  scale|| forced_scandoubler),
         .hq2x(scale==1),

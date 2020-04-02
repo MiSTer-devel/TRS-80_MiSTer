@@ -1,12 +1,11 @@
 # HT1080Z_MiSTer - To Do's:
 
  * Fixes:
-   * Adjust video to be NTSC-style output (rather than VGA)
-   * Some keyboard issues persist; correct these
+   * TRISSTICK support roughed-in but not yet working
+   * Proper 0xff return output from unmapped ports
 
  * New Features:
    * Alter cassette loading system so that official ROMs can be used without issue
-   * Implement CPU clock speed selector
    * (Possible CMD->CAS on-the-fly converter ?)
 
    * Expansion interface items:

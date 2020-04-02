@@ -336,7 +336,10 @@ begin
   cpudi <= vramdo when vramsel='1' else
            kbdout when kbdsel='1' else
            x"30" when ior='0' and cpua(7 downto 0)=x"fd" else -- printer io read
-           x"ff" when ior='0' and cpua(7 downto 0)=x"13" else -- trisstick
+			  
+           "111" & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))	-- trisstick fire, right, left, down, up
+						when ior='0' and cpua(7 downto 0)=x"13" else
+
            --x"ff";
            ram_dout;
 
