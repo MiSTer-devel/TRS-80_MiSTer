@@ -147,6 +147,7 @@ localparam CONF_STR = {
         "O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
         "-;",
         "O4,Kbd Layout,TRS-80,PC;",
+        "OAB,TRISSTICK,None,BIG5,ALPHA;",
         "O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),14.24(8x);",
         "-;",
         "R0,Reset;",
@@ -211,6 +212,7 @@ ht1080z ht1080z(
                 .status(status),
                 .joy0(joystick_0),
                 .joy1(joystick_1),
+					 .joytype(status[11:10]),
 
                 .clk42m(clk42m),
                 .clk_download(clk_sys),
