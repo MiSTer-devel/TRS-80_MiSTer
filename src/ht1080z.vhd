@@ -45,580 +45,407 @@ use IEEE.STD_LOGIC_UNSIGNED.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity ht1080z is
-  Port (
+Port (
+	reset      : in  std_logic;
 
-    reset : in std_logic;
+	clk42m     : in  STD_LOGIC;
 
-    -- osd status bits
-    status:in  std_logic_vector(7 downto 0);
+	RGB        : out STD_LOGIC_VECTOR (17 downto 0);
+	HSYNC      : out STD_LOGIC;
+	VSYNC      : out STD_LOGIC;
+	hblank     : out STD_LOGIC;
+	vblank     : out STD_LOGIC;
+	ce_pix     : out STD_LOGIC;
 
-    -- clocks
-    clk86M : in  STD_LOGIC;
-    clk42m : in  STD_LOGIC;
-    clk_download : in std_logic;
-    plllocked: in STD_LOGIC;
+	LED        : out STD_LOGIC;
 
+	audiomix   : out STD_LOGIC_VECTOR(8 downto 0);
 
-    -- SPI interface to arm io controller
-    SPI_DO	: out std_logic;
-    SPI_DI	: in  std_logic;
-    SPI_SCK	: in  std_logic;
-    SPI_SS2	: in  std_logic;
-    SPI_SS3	: in  std_logic;
-    SPI_SS4	: in  std_logic;
+	joy0		  : in  std_logic_vector(7 downto 0);
+	joy1		  : in  std_logic_vector(7 downto 0);
+	joytype	  : in  std_logic_vector(1 downto 0);
 
-    CONF_DATA0  : in  std_logic;
+	ps2_key    : in  STD_LOGIC_VECTOR(10 downto 0);
 
-    RGB : out  STD_LOGIC_VECTOR (17 downto 0);
-    HSYNC : out  STD_LOGIC;
-    VSYNC : out  STD_LOGIC;
-    hblank : out  STD_LOGIC;
-    vblank : out  STD_LOGIC;
+	kybdlayout : in  STD_LOGIC;
+	disp_color : in  std_logic_vector(1 downto 0);
+	lcasetype  : in  STD_LOGIC;
+	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
 
-    LED : out  STD_LOGIC;
-
-    audiomix: out STD_LOGIC_VECTOR(8 downto 0);
-
-
-    joy0		: in std_logic_vector(7 downto 0);
-    joy1		: in std_logic_vector(7 downto 0);
-    joytype	: in std_logic_vector(1 downto 0);
-
-	 ps2_key_parallel : in STD_LOGIC_VECTOR(10 downto 0);
-	 
-    kybdlayout : in  STD_LOGIC;
-    disp_color : in std_logic_vector(1 downto 0);
-    lcasetype  : in STD_LOGIC;
-    overclock  : in STD_LOGIC_VECTOR(1 downto 0);
-
-    pixel_clock: out STD_LOGIC;
-
-    dn_go : in std_logic;
-    dn_wr : in std_logic;
-    dn_addr : in std_logic_vector(24 downto 0);
-    dn_data : in std_logic_vector(7 downto 0);
-    dn_idx : in std_logic_vector(7 downto 0)
-
-
-    );
+	dn_clk     : in  std_logic;
+	dn_go      : in  std_logic;
+	dn_wr      : in  std_logic;
+	dn_addr    : in  std_logic_vector(24 downto 0);
+	dn_data    : in  std_logic_vector(7 downto 0)
+);
 end ht1080z;
 
 architecture Behavioral of ht1080z is
 
-  component data_io
-    port ( sck, ss, sdi         :	in std_logic;
+component dpram is
+generic (
+	DATA : integer;
+	ADDR : integer
+);
+port (
+	-- Port A
+	a_clk  : in std_logic;
+	a_wr   : in std_logic;
+	a_addr : in std_logic_vector(ADDR-1 downto 0);
+	a_din  : in std_logic_vector(DATA-1 downto 0);
+	a_dout : out std_logic_vector(DATA-1 downto 0);
 
-           -- download info
-           downloading          :  out std_logic;
-           --size				:  out std_logic_vector(24 downto 0);
-           index				:  out std_logic_vector(4 downto 0);
+	-- Port B
+	b_clk  : in std_logic;
+	b_wr   : in std_logic;
+	b_addr : in std_logic_vector(ADDR-1 downto 0);
+	b_din  : in std_logic_vector(DATA-1 downto 0);
+	b_dout : out std_logic_vector(DATA-1 downto 0)
+);
+end component;
 
-           -- external ram interface
-           clk				:	in std_logic;
-           wr					:  out std_logic;
-           addr                         :  out std_logic_vector(24 downto 0);
-           data				:  out std_logic_vector(7 downto 0)
-           );
-  end component data_io;
+component keyboard is
+port (
+	reset		: in std_logic;
+	clk_sys	: in std_logic;
 
+	ps2_key	: in std_logic_vector(10 downto 0);
+	addr		: in std_logic_vector(7 downto 0);
+	key_data	: out std_logic_vector(7 downto 0);
+	kblayout	: in std_logic;
 
+	Fn			: out std_logic_vector(11 downto 1);
+	modif		: out std_logic_vector(2 downto 0)
+);
+end component;
 
-  component dpram is
-    generic (
-      DATA : integer;
-      ADDR : integer
-      );
-    port (
-      -- Port A
-      a_clk : in std_logic;
-      a_wr : in std_logic;
-      a_addr : in std_logic_vector(ADDR-1 downto 0);
-      a_din : in std_logic_vector(DATA-1 downto 0);
-      a_dout : out std_logic_vector(DATA-1 downto 0);
+component ym2149 is
+port (
+	CLK       : in  std_logic;
+	CE        : in  std_logic;
+	RESET     : in  std_logic;
+	BDIR      : in  std_logic;
+	BC        : in  std_logic;
+	DI        : in  std_logic_vector(7 downto 0);
+	DO        : out std_logic_vector(7 downto 0);
+	CHANNEL_A : out std_logic_vector(7 downto 0);
+	CHANNEL_B : out std_logic_vector(7 downto 0);
+	CHANNEL_C : out std_logic_vector(7 downto 0);
 
-      -- Port B
-      b_clk : in std_logic;
-      b_wr : in std_logic;
-      b_addr : in std_logic_vector(ADDR-1 downto 0);
-      b_din : in std_logic_vector(DATA-1 downto 0);
-      b_dout : out std_logic_vector(DATA-1 downto 0)
-      );
-  end component dpram;
+	SEL       : in  std_logic;
+	MODE      : in  std_logic;
 
-  component keyboard is
-    port  (
-      reset		: in std_logic;
-      clk_sys	: in std_logic;
+	IOA_in    : in  std_logic_vector(7 downto 0);
+	IOA_out   : out std_logic_vector(7 downto 0);
 
-      ps2_key	: in std_logic_vector(10 downto 0);
-		addr		: in std_logic_vector(7 downto 0);
-		key_data	: out std_logic_vector(7 downto 0);
-      kblayout	: in std_logic;
+	IOB_in    : in  std_logic_vector(7 downto 0);
+	IOB_out   : out std_logic_vector(7 downto 0)
+);
+end component;
 
-		Fn			: out std_logic_vector(11 downto 1);
-		modif		: out std_logic_vector(2 downto 0)
-      );
-	end component keyboard;
+signal ch_a  : std_logic_vector(7 downto 0);
+signal ch_b  : std_logic_vector(7 downto 0);
+signal ch_c  : std_logic_vector(7 downto 0);
+signal audio : std_logic_vector(9 downto 0);
 
+signal ram_addr : std_logic_vector(16 downto 0);
+signal ram_dout : STD_LOGIC_VECTOR(7 downto 0);
 
-  function to_slv(s: string) return std_logic_vector is
-    constant ss: string(1 to s'length) := s;
-    variable rval: std_logic_vector(1 to 8 * s'length);
-    variable p: integer;
-    variable c: integer;
+signal cpua     : std_logic_vector(15 downto 0);
+signal cpudo    : std_logic_vector(7 downto 0);
+signal cpudi    : std_logic_vector(7 downto 0);
+signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1,cpuclk : std_logic;
 
-  begin
-    for i in ss'range loop
-      p := 8 * i;
-      c := character'pos(ss(i));
-      rval(p - 7 to p) := std_logic_vector(to_unsigned(c,8));
-    end loop;
-    return rval;
+signal rgbi : std_logic_vector(3 downto 0);
+signal vramdo,kbdout : std_logic_vector(7 downto 0);
 
-  end function;
+signal Fn : std_logic_vector(11 downto 0);
+signal modif : std_logic_vector(2 downto 0);
 
-  attribute keep: boolean;
-
-  signal ram_addr : std_logic_vector(16 downto 0);
-  signal ram_din : STD_LOGIC_VECTOR(7 downto 0);
-  signal ram_dout : STD_LOGIC_VECTOR(7 downto 0);
-  signal ram_we: std_logic;
-  signal ram_oe: std_logic;
-
-
-  signal   dn_wr_r : std_logic;
-  signal dn_addr_r : std_logic_vector(24 downto 0);
-  signal dn_data_r : std_logic_vector(7 downto 0);
-
-  signal res_cnt : std_logic_vector(5 downto 0) := "111111";
-  signal autores : std_logic;
-
-
-  signal pvsel : std_logic;
-
-  signal MPS2CLK : std_logic;
-  signal MPS2DAT : std_logic;
-
---signal joy0 : std_logic_vector(7 downto 0);
---signal joy1 : std_logic_vector(7 downto 0);
-
---signal status: std_logic_vector(7 downto 0);
-
---signal clk56m : std_logic;
---signal clk42m,
-  signal clk21m,clk7m : std_logic;
-  attribute keep of clk21m: signal is true;
-  attribute keep of clk7m: signal is true;
-
---signal pllLocked : std_logic;
-
-  signal cpua     : std_logic_vector(15 downto 0);
-  signal cpudo    : std_logic_vector(7 downto 0);
-  signal cpudi    : std_logic_vector(7 downto 0);
-  signal cpuwr,cpurd,cpumreq,cpuiorq,cpunmi,cpuint,cpum1,cpuclk,cpuClkEn : std_logic;
-
-  signal rgbi : std_logic_vector(3 downto 0);
-  signal hs,vs : std_logic;
-  signal romdo,vramdo,ramdo,ramHdo,kbdout : std_logic_vector(7 downto 0);
-  signal vramcs : std_logic;
-
-  signal Fn : std_logic_vector(11 downto 0);
-  signal modif : std_logic_vector(2 downto 0);
-
-  signal page,vcut,swres : std_logic;
-
-  signal romrd,ramrd,ramwr,vramsel,kbdsel : std_logic;
-  signal ior,iow,memr,memw : std_logic;
-  signal vdata : std_logic_vector(7 downto 0);
+signal romrd,ramrd,ramwr,vramsel,kbdsel : std_logic;
+signal ior,iow,memr,memw : std_logic;
 
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
-  signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
-  signal clk7_div : std_logic_vector(3 downto 0);
+signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
 
-  signal sndBC1,sndBDIR,sndCLK : std_logic;
-  signal oaudio,snddo : std_logic_vector(7 downto 0);
+signal sndBC1,sndBDIR,sndCLK : std_logic;
 
-  signal ht_rgb_white : std_logic_vector(17 downto 0);
-  signal ht_rgb_green : std_logic_vector(17 downto 0);
-  signal ht_rgb_amber : std_logic_vector(17 downto 0);
+signal ht_rgb_white : std_logic_vector(17 downto 0);
+signal ht_rgb_green : std_logic_vector(17 downto 0);
+signal ht_rgb_amber : std_logic_vector(17 downto 0);
 
-  signal ht_rgb : std_logic_vector(17 downto 0);
+signal io_ram_addr : std_logic_vector(23 downto 0);
+signal iorrd,iorrd_r : std_logic;
 
-  signal out_rgb : std_logic_vector(17 downto 0);
-  signal p_hs,p_vs,vgahs,vgavs : std_logic;
-  signal pclk : std_logic;
+signal tapebits : std_logic_vector(2 downto 0);
+alias  tapemotor : std_logic is tapebits(2);
+signal tapelatch : std_logic := '0';
 
-  signal io_ram_addr : std_logic_vector(23 downto 0);
-  signal iorrd,iorrd_r : std_logic;
+signal speaker : std_logic_vector(7 downto 0);
 
---signal audiomix : std_logic_vector(8 downto 0);
-  signal tapebits : std_logic_vector(2 downto 0);
-  alias tapemotor : std_logic is tapebits(2);
-  signal tapelatch : std_logic := '0';
-
-  signal  speaker : std_logic_vector(7 downto 0);
-  signal vga : std_logic := '0';
-
-  signal inkpulse, paperpulse, borderpulse : std_logic;
-  signal widemode : std_logic := '0';
+signal inkpulse, paperpulse, borderpulse : std_logic;
+signal widemode : std_logic := '0';
 
 begin
 
-  led <= tapemotor;
+led <= tapemotor;
 
-
-  process(clk42m)
-  begin
-    if rising_edge(clk42m) then
-      clk7m <= '0';
-      cpuClk <= '0';
+process(clk42m)
+begin
+	if rising_edge(clk42m) then
+		cpuClk <= '0';
 
 		-- CPU clock divider
 		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
-        cpuClk     <= '1';
-		  case overclock(1 downto 0) is
-			 when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
-			 when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
-			 when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
-			 when "11" => clk1774_div <= "000010";  --   8x speed = 14.24 (42MHz /  3)
-        end case;
-      else
-        clk1774_div <= clk1774_div - 1;
-      end if;
-      
-		
-      --if clk7_div = 12 then
-      --if clk7_div = "0110" then
-      if clk7_div = "0101" then
-        clk7m    <= '1';
-        clk7_div <= "0000";
-      else
-        clk7_div <= clk7_div + 1;
-      end if;
-    end if;
-  end process;
+			cpuClk     <= '1';
+			case overclock(1 downto 0) is
+				when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
+				when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
+				when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
+				when "11" => clk1774_div <= "000010";  --   8x speed = 14.24 (42MHz /  3)
+			end case;
+		else
+			clk1774_div <= clk1774_div - 1;
+		end if;
+	end if;
+end process;
 
-  ior <= cpurd or cpuiorq or (not cpum1);
-  iow <= cpuwr or cpuiorq;
-  memr <= cpurd or cpumreq;
-  memw <= cpuwr or cpumreq;
+ior <= cpurd or cpuiorq or (not cpum1);
+iow <= cpuwr or cpuiorq;
+memr <= cpurd or cpumreq;
+memw <= cpuwr or cpumreq;
 
-  romrd <= '1' when memr='0' and cpua<x"3780" else '0';
-  ramrd <= '1' when cpua(15 downto 14)="01" and memr='0' else '0';
-  ramwr <= '1' when cpua(15 downto 14)="01" and memw='0' else '0';
-  vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
-  kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
-  iorrd <= '1' when ior='0' and cpua(7 downto 0)=x"04" else '0'; -- in 04
+--romrd <= '1' when memr='0' and cpua<x"3780" else '0';
+--ramrd <= '1' when cpua(15 downto 14)="01" and memr='0' else '0';
+--ramwr <= '1' when cpua(15 downto 14)="01" and memw='0' else '0';
+vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
+kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
+iorrd <= '1' when ior='0' and cpua(7 downto 0)=x"04" else '0'; -- in 04
 
+cpu : entity work.T80s
+port map
+(
+	RESET_n => not reset,
+	CLK     => clk42m, -- 1.75 MHz
+	CEN     => cpuClk,
+	M1_n    => cpum1,
+	MREQ_n  => cpumreq,
+	IORQ_n  => cpuiorq,
+	RD_n    => cpurd,
+	WR_n    => cpuwr,
+	A       => cpua,
+	DI      => cpudi,
+	DO      => cpudo
+);
 
-  cpu : entity work.T80se
-    port map (
-      RESET_n => autores, --swres,
-      CLK_n   => clk42m, -- 1.75 MHz
-      CLKEN   => cpuClkEn,
-      WAIT_n  => '1',
-      INT_n   => '1',
-      NMI_n   => '1',
-      BUSRQ_n => '1',
-      M1_n    => cpum1,
-      MREQ_n  => cpumreq,
-      IORQ_n  => cpuiorq,
-      RD_n    => cpurd,
-      WR_n    => cpuwr,
-      RFSH_n  => open,
-      HALT_n  => open,
-      BUSAK_n => open,
-      A       => cpua,
-      DI      => cpudi,
-      DO      => cpudo
-      );
+cpudi <= vramdo when vramsel='1' else
+         kbdout when kbdsel='1' else
+         "1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))	-- trisstick right, left, down, up
+                when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else						-- (BIG5 type; "fire" shows as "up+down")
+         "111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))					-- trisstick fire, right, left, down, up
+                when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else						-- (Alpha products type; separate fire bit)
+         "11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else					-- no joystick = empty port
+         x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
+         tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else					-- cassette data
+         ram_dout;
 
-  cpudi <= vramdo when vramsel='1' else
-           kbdout when kbdsel='1' else
+-- video ram at 0x3C00
+video : entity work.videoctrl
+port map
+(
+	reset => not reset,
+	clk42 => clk42m,
+	a => cpua(13 downto 0),
+	din => cpudo,
+	dout => vramdo,
+	mreq => cpumreq,
+	iorq => cpuiorq,
+	wr => cpuwr,
+	cs => not vramsel,
+	rgbi => rgbi,
+	ce_pix => ce_pix,
+	inkp => '0', --inkpulse,
+	paperp => '0', --paperpulse,
+	borderp => '0', --borderpulse,
+	widemode => widemode,
+	lcasetype => lcasetype,
+	hsync => hsync,
+	vsync => vsync,
+	hb => hblank,
+	vb => vblank
+);
 
-           "1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))			-- trisstick right, left, down, up
-						when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else							-- (BIG5 type; "fire" shows as "up+down")
-						
-           "111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))						-- trisstick fire, right, left, down, up
-						when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else							-- (Alpha products type; separate fire bit)
-						
-           "11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else						-- no joystick = empty port
+kbdpar : keyboard
+port map
+(
+	reset	=> reset,
+	clk_sys => clk42m,
 
-			  
-           x"30" when ior='0' and cpua(7 downto 0)=x"fd" else																		-- printer io read
+	ps2_key => ps2_key,
+	addr	=> cpua(7 downto 0),
+	key_data => kbdout,
+	kblayout => kybdlayout
 
-           tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else							-- cassette data
-			  
-           ram_dout;
+	--Fn => Fn(11 downto 1),
+	--modif => modif
+);
 
+-- PSG
+-- out 1e = data port
+-- out 1f = register index
 
-  pvsel <='0' ;
-  vga <= not pvsel;
-  vdata <= cpudo;
+soundchip : ym2149
+port map
+(
+	DI        => cpudo,
 
-  -- video ram at 0x3C00
-  video : entity work.videoctrl
-    port map (
-      reset => autores, --swres and pllLocked,
-      clk42 => clk42m,
-      -- clk7 => clk7m,
-      a => cpua(13 downto 0),
-      din => vdata,--cpudo,
-      dout => vramdo,
-      mreq => cpumreq,
-      iorq => cpuiorq,
-      wr => cpuwr,
-      cs => not vramsel,
-      page => page,
-      rgbi => rgbi,
-      pclk => pclk,
-      inkp => inkpulse,
-      paperp => paperpulse,
-      borderp => borderpulse,
-      widemode => widemode,
-      lcasetype => lcasetype,
-      hsync => hs,
-      vsync => vs,
-      hb => hblank,
-      vb => vblank
-      );
+	BDIR      => sndBDIR,
+	BC        => sndBC1,
+	SEL       => '1',
+	MODE      => '0',
 
-  pixel_clock<=pclk;
+	CHANNEL_A => ch_a,
+	CHANNEL_B => ch_b,
+	CHANNEL_C => ch_c,
 
-  hsync <= hs when vga='1' else hs xor (not vs);
-  vsync <= vs when vga='1' else '1';
---  hsync <= hs xor (not vs);
---  vsync <= '1';
+	IOA_in    => (others => '1'),
+	IOB_in    => (others => '1'),
 
+	CE        => cpuClk,
+	RESET     => reset,
+	CLK       => clk42m
+);
 
-  kbdpar : keyboard
-    port  map (
-      reset	=> not autores,
-      clk_sys => clk_download,
+audio <= ("00" & ch_a) + ("00" & ch_b) + ("00" & ch_c) + ("00" & speaker);
+audiomix <= audio(9 downto 1);
 
-      ps2_key => ps2_key_parallel,
-		addr	=> cpua(7 downto 0),
-		key_data => kbdout,
-      kblayout => kybdlayout,
+sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
+sndBC1  <= cpua(0);
 
-		Fn => Fn(11 downto 1),
-		modif => modif
-      );
+with tapebits(1 downto 0) select speaker <=
+	"01000000" when "01",
+	"00100000" when "00"|"11",
+	"00000000" when others;
 
-  -- PSG
-  -- out 1e = data port
-  -- out 1f = register index
+-- Note: format of colors below is 6 bits each of: BGR, not RGB
 
-  soundchip : entity work.YM2149
-    port map (
-      -- data bus
-      I_DA      => cpudo,
-      O_DA      => open,
-      O_DA_OE_L => open,
-      -- control
-      I_A9_L    => '0',
-      I_A8      => '1',
-      I_BDIR    => sndBDIR,
-      I_BC2     => '1',
-      I_BC1     => sndBC1,
-      I_SEL_L   => '1',
+with rgbi select ht_rgb_white <=
+	"000000000000000000" when "0000",
+	"000000000000100000" when "0001",
+	"000000100000000000" when "0010",
+	"000000100000100000" when "0011",
+	"100000000000000000" when "0100",
+	"100000000000100000" when "0101",
+	"110000011000000000" when "0110",
+	"100000100000100000" when "0111",
+	"110000110000110000" when "1000",
+	"000000000000111100" when "1001",
+	"000000111100000000" when "1010",
+	"000000111100111100" when "1011",
+	"111110000000000000" when "1100",
+	"111100000000111100" when "1101",
+	"111110111110000000" when "1110",
+	"111110111110111110" when others;
 
-      O_AUDIO   => oaudio,
-      -- port a
-      I_IOA      => "ZZZZZZZZ",
-      O_IOA      => open,
-      O_IOA_OE_L => open,
-      -- port b
-      I_IOB      => "ZZZZZZZZ",
-      O_IOB      => open,
-      O_IOB_OE_L => open,
-      --
-      ENA        => cpuClk,
-      RESET_L    => autores,--swres and pllLocked,
-      CLK        => clk42m
-      );
+with rgbi select ht_rgb_green <=
+	"000000000000000000" when "0000",
+	"000000000000000000" when "0001",
+	"000000100000000000" when "0010",
+	"000000100000000000" when "0011",
+	"000000000000000000" when "0100",
+	"000000000000000000" when "0101",
+	"000000011000000000" when "0110",
+	"000000100000000000" when "0111",
+	"000000110000000000" when "1000",
+	"000000000000000000" when "1001",
+	"000000111100000000" when "1010",
+	"000000111100000000" when "1011",
+	"000000000000000000" when "1100",
+	"000000000000000000" when "1101",
+	"000000111110000000" when "1110",
+	"000000111110000000" when others;
 
-  sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
-  sndBC1  <= cpua(0);
-
-  with tapebits(1 downto 0) select speaker <=
-    "01000000" when "01",
-    "00100000" when "00"|"11",
-    "00000000" when others;
-
-  audiomix <= ('0' & oaudio) + ('0' & speaker);
-
-
-  -- Note: format of colors below is 6 bits each of: BGR, not RGB
-
-  with rgbi select ht_rgb_white <=
-    "000000000000000000" when "0000",
-    "000000000000100000" when "0001",
-    "000000100000000000" when "0010",
-    "000000100000100000" when "0011",
-    "100000000000000000" when "0100",
-    "100000000000100000" when "0101",
-    "110000011000000000" when "0110",
-    "100000100000100000" when "0111",
-    "110000110000110000" when "1000",
-    "000000000000111100" when "1001",
-    "000000111100000000" when "1010",
-    "000000111100111100" when "1011",
-    "111110000000000000" when "1100",
-    "111100000000111100" when "1101",
-    "111110111110000000" when "1110",
-    "111110111110111110" when others;
-
-  with rgbi select ht_rgb_green <=
-    "000000000000000000" when "0000",
-    "000000000000000000" when "0001",
-    "000000100000000000" when "0010",
-    "000000100000000000" when "0011",
-    "000000000000000000" when "0100",
-    "000000000000000000" when "0101",
-    "000000011000000000" when "0110",
-    "000000100000000000" when "0111",
-    "000000110000000000" when "1000",
-    "000000000000000000" when "1001",
-    "000000111100000000" when "1010",
-    "000000111100000000" when "1011",
-    "000000000000000000" when "1100",
-    "000000000000000000" when "1101",
-    "000000111110000000" when "1110",
-    "000000111110000000" when others;
-
-  with rgbi select ht_rgb_amber <=
-    "000000000000000000" when "0000",
-    "000000000000100000" when "0001",
-    "000000010000000000" when "0010",
-    "000000010000100000" when "0011",
-    "000000000000000000" when "0100",
-    "000000000000100000" when "0101",
-    "000000001100000000" when "0110",
-    "000000010000100000" when "0111",
-    "000000011000110000" when "1000",
-    "000000000000111100" when "1001",
-    "000000011110000000" when "1010",
-    "000000011110111100" when "1011",
-    "000000000000000000" when "1100",
-    "000000000000111100" when "1101",
-    "000000011111000000" when "1110",
-    "000000011111111110" when others;
+with rgbi select ht_rgb_amber <=
+	"000000000000000000" when "0000",
+	"000000000000100000" when "0001",
+	"000000010000000000" when "0010",
+	"000000010000100000" when "0011",
+	"000000000000000000" when "0100",
+	"000000000000100000" when "0101",
+	"000000001100000000" when "0110",
+	"000000010000100000" when "0111",
+	"000000011000110000" when "1000",
+	"000000000000111100" when "1001",
+	"000000011110000000" when "1010",
+	"000000011110111100" when "1011",
+	"000000000000000000" when "1100",
+	"000000000000111100" when "1101",
+	"000000011111000000" when "1110",
+	"000000011111111110" when others;
 
 
-  ht_rgb <=
-    ht_rgb_white when disp_color = "00" else
-    ht_rgb_green when disp_color = "01" else
-    ht_rgb_amber when disp_color = "10" else
-    "111110111110111110";
+RGB <=
+	ht_rgb_white when disp_color = "00" else
+	ht_rgb_green when disp_color = "01" else
+	ht_rgb_amber when disp_color = "10" else
+	"111110111110111110";
 
+main_mem : dpram
+generic map (
+	DATA => 8,
+	ADDR => 17
+)
+port map
+(
+	-- Port A
+	a_clk  => dn_clk,
+	a_wr   => dn_wr,
+	a_addr => dn_addr(16 downto 0),
+	a_din  => dn_data,
 
-  out_RGB<=ht_rgb;
+	-- Port B
+	b_clk  => clk42m,
+	b_wr   => ((not memw) and (cpua(15) or cpua(14))),
+	b_addr => ram_addr,
+	b_din  => cpudo,
+	b_dout => ram_dout
+);
 
+ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 
-  RGB(17 downto 12) <= out_RGB(17 downto 12);
-  RGB(11 downto  6) <= out_RGB(11 downto  6);
-  RGB( 5 downto  0) <= out_RGB( 5 downto  0);
-
-
-  main_mem : dpram
-    generic map (
-      DATA => 8,
-      ADDR => 17
-      )
-    port map (
-      -- Port A
-      a_clk  => clk42m,
-      a_wr   => dn_wr_r and dn_go,
-      a_addr => dn_addr_r(16 downto 0),
-      a_din  => dn_data_r,
-      a_dout => open,
-
-      -- Port B
-      b_clk  => clk42m,
-      b_wr   => ram_we,
-      b_addr => ram_addr,
-      b_din  => cpudo,
-      b_dout => ram_dout
-      );
-
-
-  ram_din <= cpudo when dn_go='0' else dn_data_r;
-
-  ram_we <= ((not memw) and (cpua(15) or cpua(14))) and not dn_go and cpuClkEn;
-
-  ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua) when dn_go='0' else dn_addr_r(16 downto 0);
-  ram_oe <= '1' when iorrd='1' else not memr when dn_go='0' else '0';
-
-
-  process(clk_download)
-  begin
-    if rising_edge(clk_download) then
-      if dn_wr='1' then
-        dn_wr_r <= '1';
-        dn_data_r <= dn_data;
-        dn_addr_r <= dn_addr;
-      else
-        dn_wr_r <= '0';
-      end if;
-    end if;
-  end process;
-
-
-  process (clk42m)
-  begin
-    if rising_edge(clk42m) then
-      if cpuClk='1' then
-        --if pllLocked='0' or status(0)='1' or status(2)='1' then
-        if pllLocked='0' or reset='1' then
-          res_cnt <= "000000";
-        else
-          if (res_cnt/="111111") then
-            res_cnt <= res_cnt+1;
-          end if;
-        end if;
-      end if;
-    end if;
-  end process;
-
-  cpuClkEn <= cpuClk and not dn_go;
-  autores <= '1' when res_cnt="111111" else '0';
-
-
-  process (clk42m,dn_go,autores)
-  begin
-    if dn_go='1' or autores='0' then
-      io_ram_addr <= x"010000"; -- above 64k
-      iorrd_r<='0';
-    else
-      if rising_edge(clk42m) then
-        if cpuClk='1' then
-          if ior='0' and cpua(7 downto 0)=x"ff" then
-				tapelatch <= '0';
-			 end if;
-          if iow='0' and cpua(7 downto 0)=x"ff" then
-            tapebits <= cpudo(2 downto 0);
-            widemode <= cpudo(3);
-				tapelatch <= '0';
-          end if;
-          if iow='0' and cpua(7 downto 2)="000001" then -- out 4 5 6
-            case cpua(1 downto 0) is
-              when "00"=> io_ram_addr(7 downto 0) <= cpudo;
-              when "01"=> io_ram_addr(15 downto 8) <= cpudo;
-              when "10"=> io_ram_addr(23 downto 16) <= cpudo;
-              when others => null;
-            end case;
-          end if;
-          iorrd_r<=iorrd;
-          if iorrd='0' and iorrd_r='1' then
-            io_ram_addr <= io_ram_addr + 1;
-          end if;
-        end if;
-      end if;
-    end if;
-  end process;
-
+process (clk42m,dn_go,reset)
+begin
+	if dn_go='1' or reset='1' then
+		io_ram_addr <= x"010000"; -- above 64k
+		iorrd_r<='0';
+	else
+		if rising_edge(clk42m) then
+			if cpuClk='1' then
+				if ior='0' and cpua(7 downto 0)=x"ff" then
+					tapelatch <= '0';
+				end if;
+				if iow='0' and cpua(7 downto 0)=x"ff" then
+					tapebits <= cpudo(2 downto 0);
+					widemode <= cpudo(3);
+					tapelatch <= '0';
+				end if;
+				if iow='0' and cpua(7 downto 2)="000001" then -- out 4 5 6
+					case cpua(1 downto 0) is
+						when "00"=> io_ram_addr(7 downto 0) <= cpudo;
+						when "01"=> io_ram_addr(15 downto 8) <= cpudo;
+						when "10"=> io_ram_addr(23 downto 16) <= cpudo;
+						when others => null;
+					end case;
+				end if;
+				iorrd_r<=iorrd;
+				if iorrd='0' and iorrd_r='1' then
+					io_ram_addr <= io_ram_addr + 1;
+				end if;
+			end if;
+		end if;
+	end if;
+end process;
 
 end Behavioral;

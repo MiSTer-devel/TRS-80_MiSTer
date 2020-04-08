@@ -75,7 +75,6 @@ assign key_data =  (addr[0] ? keys[0] : 8'b00000000)
                  | (addr[7] ? keys[7] : 8'b00000000);
 
 reg  input_strobe = 0;
-wire shift = modif[0];
 
 always @(posedge clk_sys) begin
 	reg old_reset = 0;
@@ -308,60 +307,16 @@ always @(posedge clk_sys) begin
 	end
 end
 
-reg [8:0] auto[46] = '{
-	255,
-
-	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,
-
-	{1'b1, 8'h59}, // right shift
-	{1'b1, 8'h11}, // alt
-	{1'b1, 8'h14}, // ctrl
-	{1'b0, 8'h3b}, // J
-	{1'b1, 8'h3b}, // J
-	{1'b0, 8'h52}, // "
-	{1'b1, 8'h52}, // "
-	0,
-	{1'b0, 8'h52}, // "
-	{1'b1, 8'h52}, // "
-	{1'b0, 8'h5a}, // enter
-	{1'b1, 8'h5a}, // enter
-	255
-};
-
 always @(posedge clk_sys) begin
-	integer div;
-	reg [5:0] auto_pos = 0;
-	reg old_reset = 0;
 	reg old_state;
 
 	input_strobe <= 0;
-	old_reset <= reset;
 	old_state <= ps2_key[10];
 
-	if(~old_reset & reset)begin
-		auto_pos <= 0;
-	end
-	else begin
-		if(auto[auto_pos] == 255) begin
-			div <=0;
-			if(old_state != ps2_key[10]) begin
-				press_btn <= ps2_key[9];
-				code <= ps2_key[7:0];
-				input_strobe <= 1;
-				if((ps2_key[8:0] == 9) && ~ps2_key[9]) auto_pos <= 1; // F10
-			end
-		end
-		else begin
-			div <= div + 1;
-			if(div == 7000000) begin 
-				div <=0;
-				if(auto[auto_pos]) {input_strobe, press_btn, code} <= {1'b1, auto[auto_pos]};
-				auto_pos <= auto_pos + 1'd1;
-			end
-		end
+	if(old_state != ps2_key[10]) begin
+		press_btn <= ps2_key[9];
+		code <= ps2_key[7:0];
+		input_strobe <= 1;
 	end
 end
 

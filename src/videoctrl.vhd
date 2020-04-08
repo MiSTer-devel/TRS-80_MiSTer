@@ -49,29 +49,27 @@ entity videoctrl is
 		V_START : integer := 2+28+((264-192)/2)+4
 	 );
     Port (   
-	   reset : in  STD_LOGIC;
-	   clk42 : in  STD_LOGIC;
-	   --clk7 : in  STD_LOGIC;
-               a : in  STD_LOGIC_VECTOR (13 downto 0);
-             din : in  STD_LOGIC_VECTOR (7 downto 0);
-            dout : out STD_LOGIC_VECTOR (7 downto 0);
-            mreq : in  STD_LOGIC;
-            iorq : in  STD_LOGIC;
-              wr : in  STD_LOGIC;
-	      cs : in  STD_LOGIC;
-		page : in  STD_LOGIC;
-		inkp : in  STD_LOGIC;
-	 paperp : in  STD_LOGIC;
-	borderp : in  STD_LOGIC;
-	  widemode : in  STD_LOGIC;
-	 lcasetype : in  STD_LOGIC;
-            rgbi : out STD_LOGIC_VECTOR (3 downto 0);	
-				pclk : out STD_LOGIC;
-           hsync : out STD_LOGIC;
-           vsync : out STD_LOGIC;
-           hb : out STD_LOGIC;
-           vb : out STD_LOGIC
-			  );
+		reset     : in  STD_LOGIC;
+		clk42     : in  STD_LOGIC;
+		a         : in  STD_LOGIC_VECTOR (13 downto 0);
+		din       : in  STD_LOGIC_VECTOR (7 downto 0);
+		dout      : out STD_LOGIC_VECTOR (7 downto 0);
+		mreq      : in  STD_LOGIC;
+		iorq      : in  STD_LOGIC;
+		wr        : in  STD_LOGIC;
+		cs        : in  STD_LOGIC;
+		inkp      : in  STD_LOGIC;
+		paperp    : in  STD_LOGIC;
+		borderp   : in  STD_LOGIC;
+		widemode  : in  STD_LOGIC;
+		lcasetype : in  STD_LOGIC;
+		rgbi      : out STD_LOGIC_VECTOR (3 downto 0);	
+		ce_pix    : out STD_LOGIC;
+		hsync     : out STD_LOGIC;
+		vsync     : out STD_LOGIC;
+		hb        : out STD_LOGIC;
+		vb        : out STD_LOGIC
+		);
 end videoctrl;
 
 
@@ -404,13 +402,7 @@ x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"00",x"
  --others => x"ff"
 );
 
--- 0  1    2
--- 21 10.5 5.25
-signal clkdiv : std_logic_vector(2 downto 0);
-alias   clk21 : std_logic is clkdiv(0);
-alias clk10_5 : std_logic is clkdiv(1);
-alias clk5_25 : std_logic is clkdiv(2);
-
+signal clkdiv : std_logic_vector(1 downto 0);
 
 signal hctr : std_logic_vector(9 downto 0);
 signal vctr : std_logic_vector(8 downto 0);
@@ -420,20 +412,16 @@ signal hstart : std_logic_vector(9 downto 0);
 signal vstart : std_logic_vector(8 downto 0);
 signal vend : std_logic_vector(8 downto 0);
 
-signal pxclk : std_logic;
-signal xpxclk : std_logic;
+signal ce   : std_logic;
 
 signal hact,vact : std_logic;
-
 
 signal border : std_logic_vector(3 downto 0) := "0010";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
-signal  pixel : std_logic_vector(3 downto 0);
 signal  vid_addr : std_logic_vector(9 downto 0);
 
 signal screen : std_logic;
-signal hblank,vblank,blank : std_logic;
 
 signal vaVert : std_logic_vector(3 downto 0); -- vertical line
 signal vaHoriz : std_logic_vector(5 downto 0); -- horizontal columnt pos
@@ -448,96 +436,95 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
-
 begin
-
-
-pxclk <= clk10_5;
-
-xpxclk <= clk10_5;
 
 hstart <= conv_std_logic_vector(H_START,10);
 vstart <= conv_std_logic_vector(36,9);
-vend <= conv_std_logic_vector(264,9);
+vend <= conv_std_logic_vector(263,9);
+
+ce_pix <= ce;
 
 process(clk42)
 begin
   if rising_edge(clk42) then
-    clkdiv <= clkdiv + 1;  
+		clkdiv <= clkdiv + 1;
+		ce <= '0';
+		if clkdiv = 0 then
+			ce <= '1';
+		end if;
   end if;
 end process;
 
-process(RESET,clk10_5)
+process(RESET,clk42)
 begin
- if RESET='0' then
-   ink <= "1000";
-	paper <= "0000";
-	border <= "0000";
- else
-  if rising_edge(clk10_5) then
-  
-		rinkp <= INKP;
-		rpaperp <= PAPERP;
-		rborderp <= BORDERP;
-		if rinkp='0' and INKP='1' then
-		  ink <= ink+1;
-		end if;
-		if rpaperp='0' and PAPERP='1' then
-		  paper <= paper+1;
-		end if;
-		if rborderp='0' and BORDERP='1' then
-		  border <= border+1;
-		end if;					  
-			
-	 if iorq='0' and wr='0' and a(7 downto 2)="000000" then
-	   case a(1 downto 0) is
-		  when "00"=> ink<=din(3 downto 0);
-		  when "01"=> paper<=din(3 downto 0);
-		  when "10"=> border<=din(3 downto 0);		  
-		  when others=>null;
-		end case;
-	 end if;
-  end if;  
- end if;
+	if RESET='0' then
+		ink <= "1000";
+		paper <= "0000";
+		border <= "0000";
+	else
+		if rising_edge(clk42) then
+			if ce = '1' then
+				rinkp <= INKP;
+				rpaperp <= PAPERP;
+				rborderp <= BORDERP;
+				if rinkp='0' and INKP='1' then
+					ink <= ink+1;
+				end if;
+				if rpaperp='0' and PAPERP='1' then
+					paper <= paper+1;
+				end if;
+				if rborderp='0' and BORDERP='1' then
+					border <= border+1;
+				end if;					  
+				if iorq='0' and wr='0' and a(7 downto 2)="000000" then
+					case a(1 downto 0) is
+						when "00"=> ink<=din(3 downto 0);
+						when "01"=> paper<=din(3 downto 0);
+						when "10"=> border<=din(3 downto 0);		  
+						when others=>null;
+					end case;
+				end if;
+			end if;
+		end if;  
+	end if;
 end process;
 
 
-process(clk10_5)
+process(clk42)
 begin
-  if rising_edge(clk10_5) then
-  
-	 if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
-		chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
-	 else
-		chrGrap <= chrmem(conv_integer( chrCode & vpos ));
-	 end if;
-	 
-  end if;  
+	if rising_edge(clk42) then
+		if ce = '1' then
+			if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
+				chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
+			else
+				chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+			end if;
+		end if;
+	end if;  
 end process;
-
 
 vid_addr <=  vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode);
-  vram : dpram
-    generic map (
-      DATA => 8,
-      ADDR => 10
-      )
-    port map (
-      -- Port A
-      a_clk  => clk42,
-      a_wr   => not cs and not wr,
-      a_addr => a(9 downto 0),
-      a_din  => din,
-      a_dout => dout,
 
-      -- Port B
-      b_clk  => clk10_5,
-      b_wr   => '0',
-      b_addr => vid_addr,
-      b_din  => din,
-      b_dout => chrCode 
-      );
+vram : dpram
+generic map (
+	DATA => 8,
+	ADDR => 10
+)
+port map (
+	-- Port A
+	a_clk  => clk42,
+	a_wr   => not cs and not wr,
+	a_addr => a(9 downto 0),
+	a_din  => din,
+	a_dout => dout,
 
+	-- Port B
+	b_clk  => clk42,
+	b_wr   => '0',
+	b_addr => vid_addr,
+	b_din  => (others => '0'),
+	b_dout => chrCode
+);
 
 
 -- h and v counters
@@ -546,110 +533,89 @@ vid_addr <=  vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode);
 -- 64*6 pixels active screen = 384 pixels
 -- visible area: 52*10.5 = 546
 -- Horizontal: |42T-hsync|84T-porch|81T-border|384T-screen|81T-border|
-process(pxclk)
+process(clk42)
 begin
-  if rising_edge(pxclk) then
-     if hctr=671 then
-	    hctr<="0000000000";
-		 v1 <= not v1; 
-		 if vctr>=vend then
-		   vctr<="000000000";
-			v1 <= '0';
-		 else
-		   vctr<=vctr+1;
-		 end if;
-	  else
-	    hctr<=hctr+1;
-	  end if;
-  end if;
+	if rising_edge(clk42) then
+		if ce = '1' then
+			hctr<=hctr+1;
+			if hctr=671 then
+				hctr<=(others=>'0');
+				vctr<=vctr+1;
+				if vctr>=vend then
+					vctr<=(others=>'0');
+				end if;
+			end if;
+		end if;
+	end if;
 end process;
 
-
-process(pxclk)
+process(clk42)
 begin
- if falling_edge(pxclk) then
-
-	-- 12*10.5
-	if hctr<126 or hctr>662 then
-	  hblank <= '0';
-	else
-	  hblank <= '1';
-	end if;
-	
-	if hctr<42 then -- 4*10.5
-	  hsync <= '0';
-	else
-	  hsync <= '1';
-	end if;
-		
-	if vctr<4 or vctr>263 then
-	  vblank <= '0';
-	else
-	  vblank <= '1';
-	end if;
-
-	if vctr<3 then
-	  vsync <= '0';
-	else
-	  vsync <= '1';
-	end if;
-		
- end if;	 	 
+	if falling_edge(clk42) then
+		if ce = '1' then
+			if hctr<42 then -- 4*10.5
+				hsync <= '1';
+				if vctr<3 then
+					vsync <= '1';
+				else
+					vsync <= '0';
+				end if;
+			else
+				hsync <= '0';
+			end if;
+		end if;
+	end if;	 	 
 end process; 
 
 hact <= '1' when hctr>=hstart and hctr<hstart+384 else '0';
 vact <= '1' when vctr>=vstart and vctr<vstart+192 else '0';
 
-
-process(xpxclk)
+process(clk42)
 begin
-  if rising_edge(xpxclk) then   
-    if hact='1' and vact='1' then
-	   if hpos=5 then
-		  hpos <= "000";
-		  vaHoriz <= vaHoriz+1;
-		  if (widemode = '0' or vaHoriz(0) = '1') then
-		    shiftReg <= chrGrap;
-		  else
-		  	 shiftReg <= shiftReg(6 downto 0) & '0';
-		  end if;
-		else
-		  if (widemode = '0' or ( hpos(0) = '1') ) then	-- if widemode, only shift half the time
-			 shiftReg <= shiftReg(6 downto 0) & '0';
-		  end if;
-		  hpos <= hpos+1;
+	if rising_edge(clk42) then
+		if ce = '1' then
+			hb <= not hact;
+			vb <= not vact;
+			if hact='1' and vact='1' then
+				if hpos=5 then
+					hpos <= "000";
+					vaHoriz <= vaHoriz+1;
+					if (widemode = '0' or vaHoriz(0) = '1') then
+						shiftReg <= chrGrap;
+					else
+						shiftReg <= shiftReg(6 downto 0) & '0';
+					end if;
+				else
+					if (widemode = '0' or ( hpos(0) = '1') ) then	-- if widemode, only shift half the time
+						shiftReg <= shiftReg(6 downto 0) & '0';
+					end if;
+					hpos <= hpos+1;
+				end if;
+				screen<= '1';
+			else
+				screen<= '0';
+				hpos <= "101";
+				vaHoriz <= "000000"; 
+				shiftReg <= "00000000"; -- keep it clear
+				if vctr=0 then
+					-- new frame
+					vaVert<= "0000";
+					vpos <= "0000";
+
+				elsif vact='1' and hctr=hstart+384+2 then
+					-- end of a scanline
+					if vpos=11 then
+						vpos <= "0000";
+						vaVert <= vaVert+1;
+					else
+						vpos <= vpos+1;
+					end if;
+				end if;
+			end if;
 		end if;
-	   screen<= '1';
-	 else
-	   screen<= '0';
-		hpos <= "101";
-		vaHoriz <= "000000"; 
-		shiftReg <= "00000000"; -- keep it clear
-		if vctr=0 then
-		  -- new frame
-		  vaVert<= "0000";
-		  vpos <= "0000";
+	end if;
+end process;
 
-		elsif vact='1' and hctr=hstart+384+2 then
-		  -- end of a scanline
-		  if vpos=11 then
-		    vpos <= "0000";
-			 vaVert <= vaVert+1;
-		  else
-		    vpos <= vpos+1;
-		  end if;
-		end if;
-	 end if;
-  end if;
-end process; 
-
-pixel <= border when screen='0' else paper when shiftReg(5)='0' else ink;
-blank <= hblank and vblank;
-hb <= hblank;
-vb <= vblank;
-rgbi <= pixel when blank='1' else "0000";
-
-pclk <= clk10_5;
+rgbi <= border when screen='0' else paper when shiftReg(5)='0' else ink;
 
 end Behavioral;
-
