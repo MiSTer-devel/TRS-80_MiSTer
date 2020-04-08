@@ -80,8 +80,9 @@ entity ht1080z is
     audiomix: out STD_LOGIC_VECTOR(8 downto 0);
 
 
-    joy0 : in std_logic_vector(7 downto 0);
-    joy1 : in std_logic_vector(7 downto 0);
+    joy0		: in std_logic_vector(7 downto 0);
+    joy1		: in std_logic_vector(7 downto 0);
+    joytype	: in std_logic_vector(1 downto 0);
 
 	 ps2_key_parallel : in STD_LOGIC_VECTOR(10 downto 0);
 	 
@@ -255,6 +256,7 @@ architecture Behavioral of ht1080z is
 --signal audiomix : std_logic_vector(8 downto 0);
   signal tapebits : std_logic_vector(2 downto 0);
   alias tapemotor : std_logic is tapebits(2);
+  signal tapelatch : std_logic := '0';
 
   signal  speaker : std_logic_vector(7 downto 0);
   signal vga : std_logic := '0';
@@ -335,10 +337,22 @@ begin
 
   cpudi <= vramdo when vramsel='1' else
            kbdout when kbdsel='1' else
-           x"30" when ior='0' and cpua(7 downto 0)=x"fd" else -- printer io read
-           x"ff" when ior='0' and cpua(7 downto 0)=x"13" else -- trisstick
-           --x"ff";
+
+           "1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))			-- trisstick right, left, down, up
+						when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else							-- (BIG5 type; "fire" shows as "up+down")
+						
+           "111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))						-- trisstick fire, right, left, down, up
+						when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else							-- (Alpha products type; separate fire bit)
+						
+           "11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else						-- no joystick = empty port
+
+			  
+           x"30" when ior='0' and cpua(7 downto 0)=x"fd" else																		-- printer io read
+
+           tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else							-- cassette data
+			  
            ram_dout;
+
 
   pvsel <='0' ;
   vga <= not pvsel;
@@ -429,9 +443,9 @@ begin
   sndBDIR <= '1' when cpua(7 downto 1)="0001111" and iow='0' else '0';
   sndBC1  <= cpua(0);
 
-  with tapebits select speaker <=
-    "01000000" when "001",
-    "00100000" when "000"|"011",
+  with tapebits(1 downto 0) select speaker <=
+    "01000000" when "01",
+    "00100000" when "00"|"11",
     "00000000" when others;
 
   audiomix <= ('0' & oaudio) + ('0' & speaker);
@@ -581,9 +595,13 @@ begin
     else
       if rising_edge(clk42m) then
         if cpuClk='1' then
+          if ior='0' and cpua(7 downto 0)=x"ff" then
+				tapelatch <= '0';
+			 end if;
           if iow='0' and cpua(7 downto 0)=x"ff" then
             tapebits <= cpudo(2 downto 0);
             widemode <= cpudo(3);
+				tapelatch <= '0';
           end if;
           if iow='0' and cpua(7 downto 2)="000001" then -- out 4 5 6
             case cpua(1 downto 0) is
