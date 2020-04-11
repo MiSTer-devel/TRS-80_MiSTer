@@ -204,7 +204,7 @@ begin
 				when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
 				when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
 				when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
-				when "11" => clk1774_div <= "000010";  --   8x speed = 14.24 (42MHz /  3)
+				when "11" => clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)
 			end case;
 		else
 			clk1774_div <= clk1774_div - 1;
@@ -349,47 +349,11 @@ with rgbi select ht_rgb_white <=
 	"111110111110000000" when "1110",
 	"111110111110111110" when others;
 
-with rgbi select ht_rgb_green <=
-	"000000000000000000" when "0000",
-	"000000000000000000" when "0001",
-	"000000100000000000" when "0010",
-	"000000100000000000" when "0011",
-	"000000000000000000" when "0100",
-	"000000000000000000" when "0101",
-	"000000011000000000" when "0110",
-	"000000100000000000" when "0111",
-	"000000110000000000" when "1000",
-	"000000000000000000" when "1001",
-	"000000111100000000" when "1010",
-	"000000111100000000" when "1011",
-	"000000000000000000" when "1100",
-	"000000000000000000" when "1101",
-	"000000111110000000" when "1110",
-	"000000111110000000" when others;
-
-with rgbi select ht_rgb_amber <=
-	"000000000000000000" when "0000",
-	"000000000000100000" when "0001",
-	"000000010000000000" when "0010",
-	"000000010000100000" when "0011",
-	"000000000000000000" when "0100",
-	"000000000000100000" when "0101",
-	"000000001100000000" when "0110",
-	"000000010000100000" when "0111",
-	"000000011000110000" when "1000",
-	"000000000000111100" when "1001",
-	"000000011110000000" when "1010",
-	"000000011110111100" when "1011",
-	"000000000000000000" when "1100",
-	"000000000000111100" when "1101",
-	"000000011111000000" when "1110",
-	"000000011111111110" when others;
-
 
 RGB <=
 	ht_rgb_white when disp_color = "00" else
-	ht_rgb_green when disp_color = "01" else
-	ht_rgb_amber when disp_color = "10" else
+	"000000"  & ht_rgb_white(11 downto 6) & "000000" when disp_color = "01" else						-- Green = zero out R and B channels
+	"0000000" & ht_rgb_white(11 downto 7) & ht_rgb_white(5 downto 0) when disp_color = "10" else -- Amber = full red amount but only half green
 	"111110111110111110";
 
 main_mem : dpram

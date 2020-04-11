@@ -1,7 +1,6 @@
 # HT1080Z_MiSTer - To Do's:
 
  * Fixes:
-   * TRISSTICK support roughed-in but not yet working
    * Proper 0xff return output from unmapped ports
 
  * New Features:

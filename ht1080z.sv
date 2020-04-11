@@ -122,13 +122,13 @@ assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQM
 
 assign BUTTONS = 0;
 
-assign VIDEO_ARX = 4;
-assign VIDEO_ARY = 3;
+assign VIDEO_ARX = 11;				// aspect ratio of only displayed area is     11:10
+assign VIDEO_ARY = 10;				// aspect ratio including all border space is  4:3
 
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
-assign LED_DISK  = LED;						/* later add disk motor on/off */
+assign LED_DISK  = LED;				/* later add disk motor on/off */
 assign LED_POWER = 0;
 assign LED_USER  = ioctl_download;
 
@@ -143,7 +143,7 @@ localparam CONF_STR = {
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
-	"O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),14.24(8x);",
+	"O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),21.36(12x);",
 	"-;",
 	"R0,Reset;",
 	"J,Fire;",
