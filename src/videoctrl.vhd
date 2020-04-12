@@ -37,16 +37,16 @@
 -- you have the latest version of this file.
 --
 
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.STD_LOGIC_ARITH.ALL;
 use IEEE.STD_LOGIC_UNSIGNED.ALL; 
 
+
 entity videoctrl is
 	Generic (
-		H_START : integer := 42+84+81-5;
-		V_START : integer := 2+28+((264-192)/2)+4
+		H_START : integer := 165;		-- (630-384)/2 + 42
+		V_START : integer := 37			-- (260-192)/2 + 3
 	 );
     Port (   
 		reset     : in  STD_LOGIC;
@@ -65,6 +65,7 @@ entity videoctrl is
 		lcasetype : in  STD_LOGIC;
 		rgbi      : out STD_LOGIC_VECTOR (3 downto 0);	
 		ce_pix    : out STD_LOGIC;
+		overscan  : in  STD_LOGIC_VECTOR (1 downto 0);
 		hsync     : out STD_LOGIC;
 		vsync     : out STD_LOGIC;
 		hb        : out STD_LOGIC;
@@ -135,40 +136,6 @@ x"00",x"1F",x"15",x"15",x"1D",x"11",x"11",x"1F",x"00",x"00",x"00",x"00",x"00",x"
 x"00",x"1F",x"11",x"11",x"1D",x"15",x"15",x"1F",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",
 x"00",x"1F",x"11",x"11",x"17",x"15",x"15",x"1F",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",
 x"00",x"1F",x"15",x"15",x"17",x"11",x"11",x"1F",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",
-
---x"0e",x"11",x"15",x"17",x"16",x"10",x"0f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate @  0x00
---x"04",x"0a",x"11",x"11",x"1f",x"11",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate A this character ROM repeats uppercase from 0x01-0x1f
---x"1e",x"09",x"09",x"0e",x"09",x"09",x"1e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate B
---x"0e",x"11",x"10",x"10",x"10",x"11",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate C
---x"1e",x"09",x"09",x"09",x"09",x"09",x"1e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate D
---x"1f",x"10",x"10",x"1e",x"10",x"10",x"1f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate E
---x"1f",x"10",x"10",x"1e",x"10",x"10",x"10",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate F
---x"0f",x"11",x"10",x"10",x"13",x"11",x"0f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate G
---x"11",x"11",x"11",x"1f",x"11",x"11",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate H
---x"0e",x"04",x"04",x"04",x"04",x"04",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate I
---x"01",x"01",x"01",x"01",x"01",x"11",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate J
---x"11",x"12",x"14",x"18",x"14",x"12",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate K
---x"10",x"10",x"10",x"10",x"10",x"10",x"1f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate L
---x"11",x"1b",x"15",x"15",x"15",x"11",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate M
---x"11",x"11",x"19",x"15",x"13",x"11",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate N
---x"0e",x"11",x"11",x"11",x"11",x"11",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate O
---x"1e",x"11",x"11",x"1e",x"10",x"10",x"10",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate P  0x10
---x"0e",x"11",x"11",x"11",x"15",x"12",x"0d",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate Q
---x"1e",x"11",x"11",x"1e",x"14",x"12",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate R
---x"0e",x"11",x"10",x"0e",x"01",x"11",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate S
---x"1f",x"15",x"04",x"04",x"04",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate T
---x"11",x"11",x"11",x"11",x"11",x"11",x"0e",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate U
---x"11",x"11",x"11",x"0a",x"0a",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate V
---x"11",x"11",x"11",x"15",x"15",x"15",x"0a",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate W
---x"11",x"11",x"0a",x"04",x"0a",x"11",x"11",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate X
---x"11",x"11",x"0a",x"04",x"04",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate Y
---x"1f",x"01",x"02",x"04",x"08",x"10",x"1f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- Alternate Z
---x"04",x"0e",x"15",x"04",x"04",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- up arrow
---x"04",x"04",x"04",x"04",x"15",x"0e",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- down arrow
---x"00",x"04",x"08",x"1f",x"08",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- left arrow
---x"00",x"04",x"02",x"1f",x"02",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- right arrow
---x"00",x"00",x"00",x"00",x"00",x"00",x"1f",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",
-
 x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- (space)  0x20
 x"00",x"04",x"04",x"04",x"04",x"04",x"00",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- !
 x"00",x"0a",x"0a",x"0a",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",	-- "
@@ -399,7 +366,6 @@ x"38",x"38",x"38",x"38",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"00",x"
 x"07",x"07",x"07",x"07",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"00",x"00",x"00",x"00",
 x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"00",x"00",x"00",x"00"
 --[PATCH_END]
- --others => x"ff"
 );
 
 signal clkdiv : std_logic_vector(1 downto 0);
@@ -408,13 +374,12 @@ signal hctr : std_logic_vector(9 downto 0);
 signal vctr : std_logic_vector(8 downto 0);
 signal vpos : std_logic_vector(3 downto 0); -- line pos in a chr 0..11
 signal hpos : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
-signal hstart : std_logic_vector(9 downto 0);
-signal vstart : std_logic_vector(8 downto 0);
-signal vend : std_logic_vector(8 downto 0);
 
 signal ce   : std_logic;
 
-signal hact,vact : std_logic;
+signal hact,vact : std_logic;			-- '1' if inside active display area
+signal hdisp,vdisp : std_logic;		-- '1' if inside CRT scanning area (includes borders)
+signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay area (includes partial borders)
 
 signal border : std_logic_vector(3 downto 0) := "0010";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
@@ -436,11 +401,33 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
+
+-- Notes about display area:
+-- -------------------------
+-- Screen's display area (actual foreground dots) is 384x192
+-- Scanning area (cathode ray scanning) is 630x260 (plus 42 x 3 for sync signals)
+-- Partial overscan is midway between these (showing half of the border)
+
+signal hstart : std_logic_vector(9 downto 0);
+signal vstart : std_logic_vector(8 downto 0);
+
+CONSTANT hsynlen : std_logic_vector(9 downto 0) := conv_std_logic_vector(42,10);
+CONSTANT vsynlen : std_logic_vector(8 downto 0) := conv_std_logic_vector(3,9);
+CONSTANT   hsize : std_logic_vector(9 downto 0) := conv_std_logic_vector(384,10);
+CONSTANT   vsize : std_logic_vector(8 downto 0) := conv_std_logic_vector(192,9);
+CONSTANT    hend : std_logic_vector(9 downto 0) := conv_std_logic_vector(672,10);
+CONSTANT    vend : std_logic_vector(8 downto 0) := conv_std_logic_vector(263,9);
+
+CONSTANT ptlhstrt : std_logic_vector(9 downto 0) := conv_std_logic_vector(103,10);
+CONSTANT ptlvstrt : std_logic_vector(8 downto 0) := conv_std_logic_vector(20,9);
+CONSTANT  ptlhend : std_logic_vector(9 downto 0) := conv_std_logic_vector(611,10);
+CONSTANT  ptlvend : std_logic_vector(8 downto 0) := conv_std_logic_vector(243,9);
+
 begin
 
+
 hstart <= conv_std_logic_vector(H_START,10);
-vstart <= conv_std_logic_vector(36,9);
-vend <= conv_std_logic_vector(263,9);
+vstart <= conv_std_logic_vector(V_START,9);
 
 ce_pix <= ce;
 
@@ -511,14 +498,14 @@ generic map (
 	ADDR => 10
 )
 port map (
-	-- Port A
+	-- Port A - used for CPU access
 	a_clk  => clk42,
 	a_wr   => not cs and not wr,
 	a_addr => a(9 downto 0),
 	a_din  => din,
 	a_dout => dout,
 
-	-- Port B
+	-- Port B - used by raster scanner
 	b_clk  => clk42,
 	b_wr   => '0',
 	b_addr => vid_addr,
@@ -538,7 +525,7 @@ begin
 	if rising_edge(clk42) then
 		if ce = '1' then
 			hctr<=hctr+1;
-			if hctr=671 then
+			if hctr=hend then
 				hctr<=(others=>'0');
 				vctr<=vctr+1;
 				if vctr>=vend then
@@ -553,9 +540,9 @@ process(clk42)
 begin
 	if falling_edge(clk42) then
 		if ce = '1' then
-			if hctr<42 then -- 4*10.5
+			if hctr<hsynlen then -- 4*10.5
 				hsync <= '1';
-				if vctr<3 then
+				if vctr<vsynlen then
 					vsync <= '1';
 				else
 					vsync <= '0';
@@ -567,15 +554,33 @@ begin
 	end if;	 	 
 end process; 
 
-hact <= '1' when hctr>=hstart and hctr<hstart+384 else '0';
-vact <= '1' when vctr>=vstart and vctr<vstart+192 else '0';
+hact <= '1' when hctr>=hstart and hctr<hstart+hsize else '0';
+vact <= '1' when vctr>=vstart and vctr<vstart+vsize else '0';
+
+hdisp <= '1' when hctr>=hsynlen and hctr<hend else '0';
+vdisp <= '1' when vctr>=vsynlen and vctr<vend else '0';
+
+pthdisp <= '1' when hctr>=ptlhstrt and hctr<ptlhend else '0';
+ptvdisp <= '1' when vctr>=ptlvstrt and vctr<ptlvend else '0';
 
 process(clk42)
 begin
 	if rising_edge(clk42) then
 		if ce = '1' then
-			hb <= not hact;
-			vb <= not vact;
+
+			if overscan = "10" then
+				hb <= not hdisp;
+				vb <= not vdisp;
+			else
+				if overscan = "01" then
+					hb <= not pthdisp;
+					vb <= not ptvdisp;
+				else
+					hb <= not hact;
+					vb <= not vact;
+				end if;
+			end if;
+
 			if hact='1' and vact='1' then
 				if hpos=5 then
 					hpos <= "000";
@@ -602,7 +607,7 @@ begin
 					vaVert<= "0000";
 					vpos <= "0000";
 
-				elsif vact='1' and hctr=hstart+384+2 then
+				elsif vact='1' and hctr=hstart+hsize+2 then
 					-- end of a scanline
 					if vpos=11 then
 						vpos <= "0000";

@@ -122,8 +122,11 @@ assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQM
 
 assign BUTTONS = 0;
 
-assign VIDEO_ARX = 11;				// aspect ratio of only displayed area is     11:10
-assign VIDEO_ARY = 10;				// aspect ratio including all border space is  4:3
+// aspect ratio including all border space is  4:3
+// aspect ratio iwith partial border space is 20:17
+// aspect ratio of only displayed area is     11:10
+assign VIDEO_ARX = status[13] ? 4 : (status[12] ? 20 : 11);
+assign VIDEO_ARY = status[13] ? 3 : (status[12] ? 17 : 10);
 
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
@@ -139,6 +142,7 @@ localparam CONF_STR = {
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
 	"O7,Lowercase Type,Normal,Symbol;",
+	"OCD,Overscan,None,Partial,Full;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
@@ -225,12 +229,13 @@ ht1080z ht1080z
 	.kybdlayout(status[4]),
 	.disp_color(status[6:5]),
 	.lcasetype(status[7]),
+	.overscan(status[13:12]),
 	.overclock(status[9:8]),
 
 	.dn_clk(clk_sys),
 	.dn_go(ioctl_download),
 	.dn_wr(ioctl_wr),
-	.dn_addr({|ioctl_index,ioctl_addr}),
+	.dn_addr({|ioctl_index,ioctl_addr}),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
 	.dn_data(ioctl_data)
 );
 

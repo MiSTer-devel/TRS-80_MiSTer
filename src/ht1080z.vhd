@@ -70,6 +70,7 @@ Port (
 	kybdlayout : in  STD_LOGIC;
 	disp_color : in  std_logic_vector(1 downto 0);
 	lcasetype  : in  STD_LOGIC;
+	overscan   : in  STD_LOGIC_VECTOR(1 downto 0);
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
 
 	dn_clk     : in  std_logic;
@@ -271,6 +272,7 @@ port map
 	borderp => '0', --borderpulse,
 	widemode => widemode,
 	lcasetype => lcasetype,
+	overscan => overscan,
 	hsync => hsync,
 	vsync => vsync,
 	hb => hblank,
@@ -363,13 +365,13 @@ generic map (
 )
 port map
 (
-	-- Port A
+	-- Port A - used for system data load
 	a_clk  => dn_clk,
 	a_wr   => dn_wr,
 	a_addr => dn_addr(16 downto 0),
 	a_din  => dn_data,
 
-	-- Port B
+	-- Port B - used for CPU access
 	b_clk  => clk42m,
 	b_wr   => ((not memw) and (cpua(15) or cpua(14))),
 	b_addr => ram_addr,
