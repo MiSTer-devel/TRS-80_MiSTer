@@ -36,5 +36,5 @@ Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
    * OUT 6, n (where n=(0-255)) -> set address bits 23-16 of virtual memory pointer
    * OUT 5, n (where n=(0-255)) -> set address bits 15- 8 of virtual memory pointer
    * OUT 4, n (where n=(0-255)) -> set address bits  7- 0 of virtual memory pointer
-   * A = INP(4)  -> read virtual memory at current virtual memory pointer
+   * A = INP(4)  -> read virtual memory at current virtual memory pointer and increment pointer
    * Note that cassette image is loaded at 0x010000, and no memory exists beyond 0x01ffff
