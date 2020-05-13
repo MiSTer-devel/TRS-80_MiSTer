@@ -149,13 +149,16 @@ signal ch_b  : std_logic_vector(7 downto 0);
 signal ch_c  : std_logic_vector(7 downto 0);
 signal audio : std_logic_vector(9 downto 0);
 
-signal ram_addr : std_logic_vector(16 downto 0);
-signal ram_dout : STD_LOGIC_VECTOR(7 downto 0);
+signal ram_a_addr : std_logic_vector(16 downto 0);
+signal ram_b_addr : std_logic_vector(16 downto 0);
+signal ram_a_dout : STD_LOGIC_VECTOR(7 downto 0);
+signal ram_b_dout : STD_LOGIC_VECTOR(7 downto 0);
 
 signal cpua     : std_logic_vector(15 downto 0);
 signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
-signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1,cpuclk : std_logic;
+signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
+signal cpuclk,cpuclk_r : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo,kbdout : std_logic_vector(7 downto 0);
@@ -173,16 +176,24 @@ signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
 
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 
-signal ht_rgb_white : std_logic_vector(17 downto 0);
-signal ht_rgb_green : std_logic_vector(17 downto 0);
-signal ht_rgb_amber : std_logic_vector(17 downto 0);
+signal ht_rgb_white	: std_logic_vector(17 downto 0);
+signal ht_rgb_green	: std_logic_vector(17 downto 0);
+signal ht_rgb_amber	: std_logic_vector(17 downto 0);
 
-signal io_ram_addr : std_logic_vector(23 downto 0);
-signal iorrd,iorrd_r : std_logic;
+signal io_ram_addr	: std_logic_vector(23 downto 0);
+signal iorrd,iorrd_r	: std_logic;
 
-signal tapebits : std_logic_vector(2 downto 0);
-alias  tapemotor : std_logic is tapebits(2);
-signal tapelatch : std_logic := '0';
+signal tapebits		: std_logic_vector(2 downto 0);		-- motor on/off, plus two bits for output signal level
+alias  tapemotor		: std_logic is tapebits(2);
+
+signal taperead		: std_logic := '0';						-- only when motor is on, 0 = write, 1 = read
+signal tape_cyccnt	: std_logic_vector(11 downto 0);		-- CPU cycle counter for cassette carrier signal
+signal tape_leadin	: std_logic_vector(7 downto 0);		-- additional 128 bits for sync-up, just in case
+signal tape_bitptr	: natural := 7;
+
+signal tapebit_val	: std_logic := '0';						-- represents bit being sent from cassette file
+signal tapelatch		: std_logic := '0';						-- represents input bit from cassette (after signal conditioning)
+signal tapelatch_resetcnt	: std_logic_vector(3 downto 0) := "0000";	-- when port is read, reset value - but only after a few cycles
 
 signal speaker : std_logic_vector(7 downto 0);
 
@@ -191,7 +202,7 @@ signal widemode : std_logic := '0';
 
 begin
 
-led <= tapemotor;
+led <= taperead;
 
 process(clk42m)
 begin
@@ -201,12 +212,17 @@ begin
 		-- CPU clock divider
 		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
 			cpuClk     <= '1';
-			case overclock(1 downto 0) is
-				when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
-				when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
-				when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
-				when "11" => clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)
-			end case;
+			
+			if taperead = '1' then
+				clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)  --> override during tape read
+			else
+				case overclock(1 downto 0) is
+					when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
+					when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
+					when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
+					when "11" => clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)
+				end case;
+			end if;
 		else
 			clk1774_div <= clk1774_div - 1;
 		end if;
@@ -223,7 +239,7 @@ memw <= cpuwr or cpumreq;
 --ramwr <= '1' when cpua(15 downto 14)="01" and memw='0' else '0';
 vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
-iorrd <= '1' when ior='0' and cpua(7 downto 0)=x"04" else '0'; -- in 04
+iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
 cpu : entity work.T80s
 port map
@@ -241,17 +257,26 @@ port map
 	DO      => cpudo
 );
 
-cpudi <= vramdo when vramsel='1' else
-         kbdout when kbdsel='1' else
+cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
+         kbdout when kbdsel='1' else												-- keyboard ($3800-$3BFF)
+			
+			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
+
+         x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
+
          "1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))	-- trisstick right, left, down, up
                 when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else						-- (BIG5 type; "fire" shows as "up+down")
          "111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))					-- trisstick fire, right, left, down, up
                 when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else						-- (Alpha products type; separate fire bit)
          "11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else					-- no joystick = empty port
-         x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
-         tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else					-- cassette data
-         ram_dout;
 
+         tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else					-- cassette data
+			
+			x"ff"  when ior='0' else													-- all unassigned ports
+
+         ram_b_dout;																		-- RAM
+
+			
 -- video ram at 0x3C00
 video : entity work.videoctrl
 port map
@@ -295,6 +320,7 @@ port map
 );
 
 -- PSG
+-- (note: must be unique to the HT1080Z, as TRS-80 did not have this)
 -- out 1e = data port
 -- out 1f = register index
 
@@ -365,50 +391,143 @@ generic map (
 )
 port map
 (
-	-- Port A - used for system data load
+	-- Port A - used for system data load, cassette data load, and cassette readback - which won't normally happen simultaneously
 	a_clk  => dn_clk,
 	a_wr   => dn_wr,
-	a_addr => dn_addr(16 downto 0),
+	a_addr => ram_a_addr,
 	a_din  => dn_data,
+	a_dout => ram_a_dout,
 
 	-- Port B - used for CPU access
 	b_clk  => clk42m,
 	b_wr   => ((not memw) and (cpua(15) or cpua(14))),
-	b_addr => ram_addr,
+	b_addr => ram_b_addr,
 	b_din  => cpudo,
-	b_dout => ram_dout
+	b_dout => ram_b_dout
 );
 
-ram_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
+ram_a_addr <= dn_addr(16 downto 0) when dn_wr = '1' else io_ram_addr(16 downto 0);
+ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 
 process (clk42m,dn_go,reset)
 begin
 	if dn_go='1' or reset='1' then
 		io_ram_addr <= x"010000"; -- above 64k
 		iorrd_r<='0';
+
+		tapebits<="000";
+		tape_cyccnt <= x"000";
+		tape_leadin <= x"00";
+		tape_bitptr <= 7;
+		tapelatch <='0';
+		tapelatch_resetcnt <="0000";
+		
 	else
 		if rising_edge(clk42m) then
-			if cpuClk='1' then
-				if ior='0' and cpua(7 downto 0)=x"ff" then
-					tapelatch <= '0';
-				end if;
-				if iow='0' and cpua(7 downto 0)=x"ff" then
-					tapebits <= cpudo(2 downto 0);
-					widemode <= cpudo(3);
-					tapelatch <= '0';
-				end if;
-				if iow='0' and cpua(7 downto 2)="000001" then -- out 4 5 6
+			cpuClk_r <= cpuClk;
+
+			if (cpuClk_r /= cpuClk) and cpuClk='1' then
+			
+				------  Extended memory 'hack' (covers ports 4/5/6) ------
+				--
+				-- Note:
+				-- The original MiSTer port of HT1080Z placed cassette data at memory address 0x10000,
+				-- beyond accessibility of the CPU.  It created port-based access to this data
+				-- **WHICH NEVER EXISTED ON THE ORIGINAL MACHINE**
+				-- ...in order to speed up data transfer from the cassette (normally 500 baud).
+				--
+				-- To use this, it required a hacked version of the boot ROM, accessing these ports
+				-- ports instead of the original cassette data.
+
+				if iow='0' and cpua(7 downto 2)="000001" then							-- write to port 4 5 6
 					case cpua(1 downto 0) is
-						when "00"=> io_ram_addr(7 downto 0) <= cpudo;
+						when "00"=> io_ram_addr(7 downto 0) <= cpudo;					-- sets address of memory-read pointer
 						when "01"=> io_ram_addr(15 downto 8) <= cpudo;
 						when "10"=> io_ram_addr(23 downto 16) <= cpudo;
 						when others => null;
 					end case;
 				end if;
+
 				iorrd_r<=iorrd;
-				if iorrd='0' and iorrd_r='1' then
+				if iorrd='0' and iorrd_r='1' and cpua(7 downto 2)="000001" then	-- read from port 4 reads memory directly
 					io_ram_addr <= io_ram_addr + 1;
 				end if;
+
+				
+				------  Cassette data I/O (covers port $FF) ------
+				--
+				-- Added in order to support regular/original BIOS ROMs.
+				-- Synthesizes the cassette data from .CAS files; doesn't yet accept audio files as input.
+				-- Since loading a 13KB fie takes several minutes at regular speed, this version automatically
+				-- sets CPU to top speed on input.
+				--
+				if iow='0' and cpua(7 downto 0)=x"ff" then	-- write to tape port
+
+					if ((tapemotor = '0') and (cpudo(2) = '1')) then		-- if start motor, then reset pointer
+						io_ram_addr <= x"010000";
+						tape_bitptr <= 7;
+						taperead <= '0';
+						
+					elsif ((tapemotor = '1') and (cpudo(2) = '0')) then	-- if stop motor, then reset tape read status
+						taperead <= '0';
+					end if;
+
+					tapebits <= cpudo(2 downto 0);
+					widemode <= cpudo(3);
+					tapelatch <= '0';									-- tapelatch is set by cassette data bit, and only reset by write to port $FF
+				end if;
+
+				if ior='0' and cpua(7 downto 0)=x"ff" then
+					if tapemotor='1' and taperead='0' then		-- reading the port while motor is on implies tape playback
+						taperead <= '1';
+						tape_cyccnt <= x"000";
+						tape_leadin <= x"00";
+					end if;
+				end if;
+
+				if (taperead = '1') then
+					tape_cyccnt <= tape_cyccnt + 1;				-- count in *CPU* cycles, regardless of clock speed
+					
+					if tape_cyccnt < x"200" then					-- fixed-timing sync clock bit - hold the signal high for a bit
+						tapelatch <= '1';								-- DO NOT reset the latch until port is read
+						-- uncomment the following line when debugging cassette input:
+						--tapebits(1 downto 0) <= "01";	-- ** remove when working
+					end if;
+					
+					if tape_cyccnt = x"6ff" then					-- after 1791 cycles (~1ms @ normal clk), actual data bit is written only if it's a '1'
+																			-- timing reverse-engineered from Level II ROM cassette write routine
+
+						tapebit_val <= ram_a_dout(tape_bitptr);
+
+						-- uncomment the following lines when debugging cassette input:
+						--if ram_a_dout(tape_bitptr) = '1' then		-- ** make a noise
+						--	tapebits(1 downto 0) <= "01";				-- ** remove when working
+						--end if;												-- **
+							
+						if tape_bitptr = 0 then
+							io_ram_addr <= io_ram_addr + 1;
+							tape_bitptr <= 7;
+						else
+							tape_bitptr <= tape_bitptr - 1;
+						end if;
+
+					end if;
+					
+					if tape_cyccnt > x"6ff" and tape_cyccnt < x"8ff" then
+
+						if tapebit_val = '1' then					-- if set, hold it for 200 cycles like a real tape
+							tapelatch <= '1';							-- DO NOT reset the latch if '0'
+							-- uncomment the following line when debugging cassette input:
+							--tapebits(1 downto 0) <= "01";			-- ** make a noise  ** remove when working
+						end if;
+					end if;
+					
+					if tape_cyccnt >= x"e08" then					-- after 3582 cycles (~2ms), sync signal is written (and cycle reset)
+						tape_cyccnt <= x"000";
+					end if;
+					
+				end if;
+
 			end if;
 		end if;
 	end if;
