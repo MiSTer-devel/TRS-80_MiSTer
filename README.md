@@ -23,7 +23,7 @@ To load a cassette game:
  
 
 ## Notes:
- * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; while an original BASIC ROM will run, cassettes will not be loaded
+ * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
 
 ## Technical:
 Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
