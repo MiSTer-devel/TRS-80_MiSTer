@@ -189,7 +189,7 @@ alias  tapemotor		: std_logic is tapebits(2);
 signal taperead		: std_logic := '0';						-- only when motor is on, 0 = write, 1 = read
 signal tape_cyccnt	: std_logic_vector(11 downto 0);		-- CPU cycle counter for cassette carrier signal
 signal tape_leadin	: std_logic_vector(7 downto 0);		-- additional 128 bits for sync-up, just in case
-signal tape_bitptr	: natural;
+signal tape_bitptr	: natural := 7;
 
 signal tapebit_val	: std_logic := '0';						-- represents bit being sent from cassette file
 signal tapelatch		: std_logic := '0';						-- represents input bit from cassette (after signal conditioning)

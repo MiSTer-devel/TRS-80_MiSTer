@@ -381,7 +381,7 @@ signal hact,vact : std_logic;			-- '1' if inside active display area
 signal hdisp,vdisp : std_logic;		-- '1' if inside CRT scanning area (includes borders)
 signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay area (includes partial borders)
 
-signal border : std_logic_vector(3 downto 0) := "0010";
+signal border : std_logic_vector(3 downto 0) := "0000";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
 signal  vid_addr : std_logic_vector(9 downto 0);
