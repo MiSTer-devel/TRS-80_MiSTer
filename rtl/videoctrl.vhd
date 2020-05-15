@@ -66,6 +66,7 @@ entity videoctrl is
 		rgbi      : out STD_LOGIC_VECTOR (3 downto 0);	
 		ce_pix    : out STD_LOGIC;
 		overscan  : in  STD_LOGIC_VECTOR (1 downto 0);
+		flicker	  : in  STD_LOGIC;
 		hsync     : out STD_LOGIC;
 		vsync     : out STD_LOGIC;
 		hb        : out STD_LOGIC;
@@ -401,6 +402,9 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
+signal vidClear : std_logic;
+signal oldVidClear : std_logic;
+signal vidDelay : std_logic;
 
 -- Notes about display area:
 -- -------------------------
@@ -476,15 +480,46 @@ begin
 	end if;
 end process;
 
+-- Access to video ram will cause the char and graphic latches
+-- to clear causing a black line (Model 1 only)
+process(clk42)
+begin
+	if rising_edge(clk42) then
+		if ce = '1' then 
+			if cs = '0' then
+				vidClear <= '1';
+			else
+				vidClear <= '0';
+			end if;
+		end if;
+	end if;
+end process;
+
+process(clk42)
+begin
+	if rising_edge(clk42) then
+		if ce = '1' then 
+			vidDelay <= '0';
+			oldVidClear <= vidClear;
+			if oldVidClear /= vidClear then
+				vidDelay <= '1';
+			end if;
+		end if;
+	end if;
+end process;
 
 process(clk42)
 begin
 	if rising_edge(clk42) then
 		if ce = '1' then
-			if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
-				chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
-			else
-				chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+			if ((vidClear = '1' or vidDelay ='1') and flicker='1') then
+				chrGrap <= x"00";	-- Black line on video contention
+			else 
+				if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
+					chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
+				else
+					chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+				end if;
 			end if;
 		end if;
 	end if;  

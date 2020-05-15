@@ -141,6 +141,7 @@ localparam CONF_STR = {
 	"F1,CAS,Load Cassette;",
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
+	"OE,Sim Vid Flicker,No,Yes;",
 	"O7,Lowercase Type,Normal,Symbol;",
 	"OCD,Overscan,None,Partial,Full;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -231,6 +232,7 @@ ht1080z ht1080z
 	.lcasetype(status[7]),
 	.overscan(status[13:12]),
 	.overclock(status[9:8]),
+	.flicker(status[14]),
 
 	.dn_clk(clk_sys),
 	.dn_go(ioctl_download),
