@@ -141,7 +141,7 @@ localparam CONF_STR = {
 	"F1,CAS,Load Cassette;",
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
-	"OE,Sim Vid Flicker,No,Yes;",
+	"OE,Video Flicker,Off,On;",
 	"O7,Lowercase Type,Normal,Symbol;",
 	"OCD,Overscan,None,Partial,Full;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",

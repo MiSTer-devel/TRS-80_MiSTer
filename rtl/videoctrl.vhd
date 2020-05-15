@@ -402,10 +402,6 @@ signal     v1 : std_logic;
 
 signal rinkp,rpaperp,rborderp : std_logic; 
 
-signal vidClear : std_logic;
-signal oldVidClear : std_logic;
-signal vidDelay : std_logic;
-
 -- Notes about display area:
 -- -------------------------
 -- Screen's display area (actual foreground dots) is 384x192
@@ -428,7 +424,6 @@ CONSTANT  ptlhend : std_logic_vector(9 downto 0) := conv_std_logic_vector(611,10
 CONSTANT  ptlvend : std_logic_vector(8 downto 0) := conv_std_logic_vector(243,9);
 
 begin
-
 
 hstart <= conv_std_logic_vector(H_START,10);
 vstart <= conv_std_logic_vector(V_START,9);
@@ -482,37 +477,12 @@ end process;
 
 -- Access to video ram will cause the char and graphic latches
 -- to clear causing a black line (Model 1 only)
-process(clk42)
-begin
-	if rising_edge(clk42) then
-		if ce = '1' then 
-			if cs = '0' then
-				vidClear <= '1';
-			else
-				vidClear <= '0';
-			end if;
-		end if;
-	end if;
-end process;
-
-process(clk42)
-begin
-	if rising_edge(clk42) then
-		if ce = '1' then 
-			vidDelay <= '0';
-			oldVidClear <= vidClear;
-			if oldVidClear /= vidClear then
-				vidDelay <= '1';
-			end if;
-		end if;
-	end if;
-end process;
 
 process(clk42)
 begin
 	if rising_edge(clk42) then
 		if ce = '1' then
-			if ((vidClear = '1' or vidDelay ='1') and flicker='1') then
+			if (cs='0' and flicker='1') then
 				chrGrap <= x"00";	-- Black line on video contention
 			else 
 				if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
