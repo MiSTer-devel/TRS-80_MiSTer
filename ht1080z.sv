@@ -138,6 +138,7 @@ assign LED_USER  = ioctl_download;
 `include "build_id.v"
 localparam CONF_STR = {
 	"HT1080Z;;",
+	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
@@ -202,8 +203,49 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 	.ioctl_index(ioctl_index)
 );
 
+reg loader_wr;
+reg loader_en;		// Enable loader (active high)
+reg [15:0] loader_addr;
+reg [7:0] loader_data;
+reg loader_reset = 0;
+
+typedef enum {INACTIVE, GET_TYPE, GET_LEN, SETUP, TRANSFER, FINISHED} states;
+states state = states.inactive;
+
 wire rom_download = ioctl_download && !ioctl_index;
 wire reset = RESET | status[0] | buttons[1] | rom_download;
+
+always @(posedge clk_sys or negedge reset)
+begin
+	reg [7:0] bytes_len;
+	reg [7:0] block_type;
+	reg old_download;
+
+	if (reset == 1'b0)
+	begin
+		loader_reset <= 0;
+		old_download <= ioctl_download;
+		state <= states.inactive;
+		loader_en <= 0;
+	end 
+	else begin
+
+		case(state)
+			IDLE: begin 		// No transfer occurring
+				loader_wr <= 0;
+				loader_en <= 0;
+				if(~old_download && ioctl_download && ioctl_index > 1) begin
+					state <= START;
+					ioctl_wait <= 1;
+				end
+			end
+			START: begin		// Start of transfer, load block type
+				if(ioctl_wr) 
+
+
+
+	end
+end
 
 wire LED;
 
@@ -237,7 +279,7 @@ ht1080z ht1080z
 	.dn_clk(clk_sys),
 	.dn_go(ioctl_download),
 	.dn_wr(ioctl_wr),
-	.dn_addr({|ioctl_index,ioctl_addr}),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
+	.dn_addr({|3'b0,rom_download,ioctl_addr}),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
 	.dn_data(ioctl_data)
 );
 
