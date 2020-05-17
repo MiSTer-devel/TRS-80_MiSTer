@@ -204,20 +204,22 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 );
 
 reg loader_wr;
-reg loader_en;		// Enable loader (active high)
+reg loader_en;			// Enable loader (active high)
+reg loader_jump = 0;	// Jump to start address (execute_addr)
 reg [15:0] loader_addr;
+reg [15:0] execute_addr;
 reg [7:0] loader_data;
 reg loader_reset = 0;
 
-typedef enum {INACTIVE, GET_TYPE, GET_LEN, SETUP, TRANSFER, FINISHED} states;
-states state = states.inactive;
+typedef enum {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_LSB, TRANSFER, IGNORE, EXECUTE} loader_states;
+loader_states state;
 
 wire rom_download = ioctl_download && !ioctl_index;
 wire reset = RESET | status[0] | buttons[1] | rom_download;
 
 always @(posedge clk_sys or negedge reset)
 begin
-	reg [7:0] bytes_len;
+	reg [7:0] block_len;
 	reg [7:0] block_type;
 	reg old_download;
 
@@ -227,6 +229,7 @@ begin
 		old_download <= ioctl_download;
 		state <= states.inactive;
 		loader_en <= 0;
+		ioctl_wait <= 0;
 	end 
 	else begin
 
@@ -235,12 +238,52 @@ begin
 				loader_wr <= 0;
 				loader_en <= 0;
 				if(~old_download && ioctl_download && ioctl_index > 1) begin
-					state <= START;
+					state <= GET_TYPE;
 					ioctl_wait <= 1;
 				end
 			end
-			START: begin		// Start of transfer, load block type
-				if(ioctl_wr) 
+			GET_TYPE: begin		// Start of transfer, load block type
+				if(ioctl_wr) begin
+					block_type <= ioctl_dout;
+					ioctl_wait <= 0;
+					if(ioctl_dout == 0) begin	// EOF
+						state <= IDLE;
+						loader_en <= 0;
+						loader_wr <= 0;
+					else
+						state <= GET_LEN;
+					end
+				end
+			end
+			GET_LEN: begin		// Setup len or finish transfer
+				if(ioctl_wr) begin
+					block_len <=  block_type == 8'd2 ? 8'd2 : ((ioctl_dout -2 ) & 8'd255);
+					ioctl_wait <= 0;
+					state <= GET_LSB;
+				end
+			end
+			GET_LSB: begin
+				if(ioctl_wr) begin
+					loader_addr[7:0] <= ioctl_dout;
+					ioctl_wait <= 0;
+					state <= GET_MSB;
+				end 
+			end
+			GET_MSB: begin
+				if(ioctl_wr) begin
+					loader_addr[15:8] <= ioctl_dout;
+					if(block_type == 0)
+						begin 	// EOF - Ignore anything after this.  Execute should have already taken place
+							loader_wr <= 0;
+							loader_en <= 0;
+							state <= IDLE;
+							ioctl_wait <= 1;
+						else 
+							ioctl_wait <= 0;
+							
+				end 
+			end
+				
 
 
 
