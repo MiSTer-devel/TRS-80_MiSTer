@@ -78,7 +78,10 @@ Port (
 	dn_go      : in  std_logic;
 	dn_wr      : in  std_logic;
 	dn_addr    : in  std_logic_vector(24 downto 0);
-	dn_data    : in  std_logic_vector(7 downto 0)
+	dn_data    : in  std_logic_vector(7 downto 0);
+
+	execute_addr	: in std_logic_vector(15 downto 0);
+	execute_enable	: in std_logic;
 );
 end ht1080z;
 

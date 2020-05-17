@@ -203,53 +203,61 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 	.ioctl_index(ioctl_index)
 );
 
-reg loader_wr;
-reg loader_en;			// Enable loader (active high)
-reg loader_jump = 0;	// Jump to start address (execute_addr)
+reg loader_wr;			// Writing loader data to ram 
+reg loader_download;	// Download in progress (active high)
+reg execute_enable = 0;	// Jump to start address (execute_addr)
 reg [15:0] loader_addr;
 reg [15:0] execute_addr;
 reg [7:0] loader_data;
 reg loader_reset = 0;
 
-typedef enum {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_LSB, TRANSFER, IGNORE, EXECUTE} loader_states;
+typedef enum {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_LSB, SETUP, TRANSFER, IGNORE} loader_states;
 loader_states state;
 
-wire rom_download = ioctl_download && !ioctl_index;
+wire rom_download = ioctl_download && ioctl_index==0;
 wire reset = RESET | status[0] | buttons[1] | rom_download;
 
 always @(posedge clk_sys or negedge reset)
 begin
-	reg [7:0] block_len;
+	reg [8:0] block_len;
 	reg [7:0] block_type;
+	reg [15:0] block_addr;
 	reg old_download;
+	reg first_block;
 
 	if (reset == 1'b0)
 	begin
 		loader_reset <= 0;
+		execute_enable <= 0;
+		loader_addr <= 16'd0;
+		execute_addr <= 16'd0;
+		loader_data <= 8'd0;
 		old_download <= ioctl_download;
-		state <= states.inactive;
-		loader_en <= 0;
+		state <= IDLE;
+		loader_download <= 0;
 		ioctl_wait <= 0;
+		block_address <= 16'd0;
 	end 
 	else begin
 
+		loader_wr <= 0;
+		ioctl_wait <= 0;
+		execute_enable <= 0;
+
 		case(state)
 			IDLE: begin 		// No transfer occurring
-				loader_wr <= 0;
-				loader_en <= 0;
 				if(~old_download && ioctl_download && ioctl_index > 1) begin
+					loader_download <= 1;
 					state <= GET_TYPE;
-					ioctl_wait <= 1;
 				end
 			end
 			GET_TYPE: begin		// Start of transfer, load block type
+				ioctl_wait <= 0;
 				if(ioctl_wr) begin
 					block_type <= ioctl_dout;
-					ioctl_wait <= 0;
-					if(ioctl_dout == 0) begin	// EOF
+					if(ioctl_dout ==8'd0) begin	// EOF
+						loader_download <= 0;
 						state <= IDLE;
-						loader_en <= 0;
-						loader_wr <= 0;
 					else
 						state <= GET_LEN;
 					end
@@ -257,38 +265,91 @@ begin
 			end
 			GET_LEN: begin		// Setup len or finish transfer
 				if(ioctl_wr) begin
-					block_len <=  block_type == 8'd2 ? 8'd2 : ((ioctl_dout -2 ) & 8'd255);
-					ioctl_wait <= 0;
-					state <= GET_LSB;
+					if(block_type == 8'd1) begin
+						case(ioctl_dout)
+						8'd2: block_len = 9'd256;
+						8'd1: block_len = 9'd0;
+						default: block_len = {1b0,((ioctl_dout - 2 ) & 8'd255};
+						endcase
+						state = GET_LSB;
+					end else if(block_type == 8'd2) begin
+						block_len = 9'd0;
+						state = GET_LSB;
+					end else begin
+						block_len = ioctl_dout;
+						state = IGNORE;
+					end
 				end
 			end
 			GET_LSB: begin
 				if(ioctl_wr) begin
-					loader_addr[7:0] <= ioctl_dout;
-					ioctl_wait <= 0;
+					block_addr[7:0] <= ioctl_dout;
 					state <= GET_MSB;
 				end 
 			end
 			GET_MSB: begin
 				if(ioctl_wr) begin
-					loader_addr[15:8] <= ioctl_dout;
-					if(block_type == 0)
-						begin 	// EOF - Ignore anything after this.  Execute should have already taken place
-							loader_wr <= 0;
-							loader_en <= 0;
-							state <= IDLE;
-							ioctl_wait <= 1;
-						else 
-							ioctl_wait <= 0;
-							
+					block_addr[15:8] <= ioctl_dout;
+					ioctl_wait <= 1;
+					state <= SETUP;
 				end 
 			end
-				
-
-
-
+			SETUP: begin		
+				if(block_type == 8'd1) begin	// Data block
+					loader_addr <= block_addr;
+					state <= TRANSFER;
+				end if(block_type == 8'd2) begin	
+					execute_addr <= block_addr;
+					execute_enable <= 1;	// toggle execute flag
+					if(block_len > 2)  begin
+						state <= IGNORE; 
+					end else begin
+						loader_download <= 0;
+						state <= IDLE; 
+					end					
+				end else begin	// Shoudl only ever be 1 or 2, so error state
+					loader_download <= 0;
+					state <= IDLE;
+				end
+			end
+			TRANSFER: begin
+				if(ioctl_wr) begin
+					if(block_len > 0) begin
+						loader_addr <= loader_addr + 1;
+						block_len <= block_len - 1;
+						loader_data <= ioctl_dout;
+						loader_wr <= 1;
+					end else begin	// Move to next block in chain
+						state <= GET_TYPE;
+						loader_wr <= 0;
+					end
+				end
+			end
+			IGNORE: begin
+				if(ioctl_wr) begin
+					if(block_len > 0) begin
+						block_len <= block_len - 1;
+					end else begin
+						if(block_type == 8'd0 || block_type == 8'd2) begin
+							state <= IDLE; 
+							loader_download <= 0;
+						end else state <= GET_TYPE;
+					end
+				end
+			end
+		endcase
 	end
 end
+
+wire trsram_wr;			// Writing loader data to ram 
+wire trsram_download;	// Download in progress (active high)
+wire [15:0] trsram_addr;
+wire [7:0] trsram_data;
+
+assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
+assign trsram_download = loader_download ? loader_download : ioctl_download;
+assign trsram_addr = loader_download ? {4'b0, loader_addr} : {|ioctl_index,ioctl_addr};
+assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
 
@@ -320,10 +381,13 @@ ht1080z ht1080z
 	.flicker(status[14]),
 
 	.dn_clk(clk_sys),
-	.dn_go(ioctl_download),
-	.dn_wr(ioctl_wr),
-	.dn_addr({|3'b0,rom_download,ioctl_addr}),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
-	.dn_data(ioctl_data)
+	.dn_go(trsram_download),
+	.dn_wr(trsram_wr),
+	.dn_addr(trsram_addr),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
+	.dn_data(trsram_data),
+
+	.execute_addr(execute_addr),
+	.execute_enable(execute_enable)
 );
 
 ///////////////////////////////////////////////////
