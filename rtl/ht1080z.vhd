@@ -72,6 +72,7 @@ Port (
 	lcasetype  : in  STD_LOGIC;
 	overscan   : in  STD_LOGIC_VECTOR(1 downto 0);
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
+	flicker	   : in  STD_LOGIC;
 
 	dn_clk     : in  std_logic;
 	dn_go      : in  std_logic;
@@ -298,6 +299,7 @@ port map
 	widemode => widemode,
 	lcasetype => lcasetype,
 	overscan => overscan,
+	flicker => flicker,
 	hsync => hsync,
 	vsync => vsync,
 	hb => hblank,
@@ -368,7 +370,7 @@ with rgbi select ht_rgb_white <=
 	"100000000000100000" when "0101",
 	"110000011000000000" when "0110",
 	"100000100000100000" when "0111",
-	"110000110000110000" when "1000",
+	"110111111111111111" when "1000", -- P4 Phosphor 81ff00 + 7e00db = ffffdb
 	"000000000000111100" when "1001",
 	"000000111100000000" when "1010",
 	"000000111100111100" when "1011",
@@ -377,11 +379,47 @@ with rgbi select ht_rgb_white <=
 	"111110111110000000" when "1110",
 	"111110111110111110" when others;
 
+with rgbi select ht_rgb_green <=
+	"000000000000000000" when "0000",
+	"000000000000000000" when "0001",
+	"000000100000000000" when "0010",
+	"000000100000000000" when "0011",
+	"000000000000000000" when "0100",
+	"000000000000000000" when "0101",
+	"000000011000000000" when "0110",
+	"000000100000000000" when "0111",
+	"001101111111001101" when "1000", -- P1 Phosphor RGB #33FF33
+	"000000000000000000" when "1001",
+	"000000111100000000" when "1010",
+	"000000111100000000" when "1011",
+	"000000000000000000" when "1100",
+	"000000000000000000" when "1101",
+	"000000111110000000" when "1110",
+	"000000111110000000" when others;
+
+with rgbi select ht_rgb_amber <=
+	"000000000000000000" when "0000",
+	"000000000000100000" when "0001",
+	"000000010000000000" when "0010",
+	"000000010000100000" when "0011",
+	"000000000000000000" when "0100",
+	"000000000000100000" when "0101",
+	"000000001100000000" when "0110",
+	"000000010000100000" when "0111",
+	"000000101100111111" when "1000",	-- P3 Phosphor RGB #FFBB00
+	"000000000000111100" when "1001",
+	"000000011110000000" when "1010",
+	"000000011110111100" when "1011",
+	"000000000000000000" when "1100",
+	"000000000000111100" when "1101",
+	"000000011111000000" when "1110",
+	"000000011111111110" when others;
+
 
 RGB <=
 	ht_rgb_white when disp_color = "00" else
-	"000000"  & ht_rgb_white(11 downto 6) & "000000" when disp_color = "01" else						-- Green = zero out R and B channels
-	"0000000" & ht_rgb_white(11 downto 7) & ht_rgb_white(5 downto 0) when disp_color = "10" else -- Amber = full red amount but only half green
+	ht_rgb_green when disp_color = "01" else
+	ht_rgb_amber when disp_color = "10" else
 	"111110111110111110";
 
 main_mem : dpram
