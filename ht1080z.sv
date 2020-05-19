@@ -215,6 +215,7 @@ wire [15:0] loader_addr;
 wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
+wire loader_wait;
 
 cmd_loader cmd_loader
 (
@@ -222,9 +223,9 @@ cmd_loader cmd_loader
 	.reset(reset),
 
 	.ioctl_download(ioctl_download),
-	.ioctl_index(ioctl_index),
 	.ioctl_wr(ioctl_wr),
 	.ioctl_dout(ioctl_data),
+	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
 
 	.loader_wr(loader_wr),
