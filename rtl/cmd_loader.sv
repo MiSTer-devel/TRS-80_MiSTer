@@ -60,7 +60,7 @@ module cmd_loader
 typedef enum bit [2:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE} loader_states;
 loader_states state;
 
-always @(posedge clock or posedge reset)
+always_ff @(posedge clock or posedge reset)
 begin
 	logic [8:0] block_len;
 	logic [7:0] block_type;
@@ -68,7 +68,7 @@ begin
 	logic old_download;
 	logic first_block;
 
-	if (reset == 1'b1)
+	if (reset)
 	begin
 		execute_enable <= 0;
 		loader_addr <= '0;
