@@ -35,7 +35,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-module loader
+module cmd_loader
 #( parameter
         DATA = 8,                           // Data bus width
         ADDR = 16                           // Address bus width
@@ -66,12 +66,8 @@ localparam [2:0]
     SETUP = 5,
     TRANSFER = 6,
     IGNORE = 7;
-    
+
 (* syn_encoding = "safe" *) reg[2:0] state, state_next;  
-reg old_download = 0;
-reg [8:0] block_len = 9'd0;
-reg [7:0] block_type = 8'd0;
-reg [ADDR-1:0] block_addr = ADDR-1'd0;
 
 always @(posedge clock, posedge reset) begin
     if (reset) begin
@@ -82,28 +78,51 @@ always @(posedge clock, posedge reset) begin
     end
 end 
 
-always @(state, ioctl_download, ioctl_index, ioctl_wr, ioctl_dout)
+wire loader_wr_next;		
+wire loader_download_next;	
+wire loader_addr_inc;       
+wire [ADDR-1:0] loader_addr_load;      
+wire [DATA-1:0] loader_data_next;  // Data to write to ram
+wire [ADDR-1:0] execute_addr_next; // Start address for program start
+wire execute_enable_next;	
+
+wire ioctl_wait_next;
+wire [8:0] block_len_next;
+wire [7:0] block_type_next;
+wire [ADDR-1:0] block_addr_next;
+
+always @(state, ioctl_download, ioctl_index, ioctl_wr, ioctl_wait, ioctl_dout, block_type, block_len, block_addr, loader_download, trigger_start)
 begin
 
-    old_download = ioctl_download;
-    out_loader_wr = 0;
-    ioctl_wait = 0;
-    out_execute_enable = 0;
+    loader_wr_next = 0;
+    loader_download_next = loader_download;
+    block_addr_next = 0;
+    loader_addr_inc = 0;
+    loader_addr_load = 0;
+    loader_data_next = {DATA{1'b0}};
+    loader_addr_load = 0;
+    execute_addr_next = {ADDR{1'b0}};
+    execute_enable_next = 0;
+    loader_addr_load = 0;
+
+    ioctl_wait_next = ioctl_wait;
+    block_len_next = block_len;
+    block_type_next = block_type;
     state_next = state;
 
     case(state)
         IDLE: begin 		// No transfer occurring
-            if(~old_download && ioctl_download && ioctl_index > 1) begin
-                out_loader_download = 1;
+            if(trigger_start) begin
+                loader_download_next = 1;
                 state_next = GET_TYPE;
             end
         end
         GET_TYPE: begin		// Start of transfer, load block type
-            ioctl_wait = 0;
+            ioctl_wait_next = 0;
             if(ioctl_wr) begin
-                block_type = ioctl_dout;
+                block_type_next = ioctl_dout;
                 if(ioctl_dout == 8'd0) begin	// EOF
-                    out_loader_download = 0;
+                    loader_download_next = 0;
                     state_next = IDLE;
                 end else begin
                     state_next = GET_LEN;
@@ -114,76 +133,117 @@ begin
             if(ioctl_wr) begin
                 if(block_type == 8'd1) begin
                     case(ioctl_dout)
-                    8'd2: block_len = 9'd256;
-                    8'd1: block_len = 9'd0;
-                    default: block_len = (ioctl_dout - 2) & 9'd255;
+                    8'd2: block_len_next = 9'd256;
+                    8'd1: block_len_next = 9'd0;
+                    default: block_len_next = (ioctl_dout - 2) & 9'd255;
                     endcase
                     state_next = GET_LSB;
                 end else if(block_type == 8'd2) begin
-                    block_len = 9'd0;
+                    block_len_next = 9'd0;
                     state_next = GET_LSB;
                 end else begin
-                    block_len = ioctl_dout;
+                    block_len_next = ioctl_dout;
                     state_next = IGNORE;
                 end
             end
         end
         GET_LSB: begin
             if(ioctl_wr) begin
-                block_addr[7:0] = ioctl_dout;
+                block_addr_next[7:0] = ioctl_dout;
                 state_next = GET_MSB;
             end 
         end
         GET_MSB: begin
             if(ioctl_wr) begin
-                block_addr[15:8] = ioctl_dout;
-                ioctl_wait = 1;
+                block_addr_next[15:8] = ioctl_dout;
+                ioctl_wait_next = 1;
                 state_next = SETUP;
             end 
         end
         SETUP: begin		
             if(block_type == 8'd1) begin	// Data block
-                out_loader_addr = block_addr;
+                loader_addr_load = 1;
                 state_next = TRANSFER;
             end if(block_type == 8'd2) begin	
-                out_execute_addr = block_addr;
-                out_execute_enable = 1;	// toggle execute flag
+                execute_addr_next = block_addr;
+                execute_enable_next = 1;	// toggle execute flag
                 if(block_len > 2)  begin
                     state_next = IGNORE; 
                 end else begin
-                    out_loader_download = 0;
+                    loader_download_next = 0;
                     state_next = IDLE; 
                 end					
             end else begin	// Should only ever be 1 or 2, so error state
-                out_loader_download = 0;
+                loader_download_next = 0;
                 state_next = IDLE;
             end
         end
         TRANSFER: begin
             if(ioctl_wr) begin
                 if(block_len > 0) begin
-                    out_loader_addr = out_loader_addr + 1;
-                    block_len = block_len - 1;
-                    out_loader_data = ioctl_dout;
-                    out_loader_wr = 1;
+                    loader_addr_inc = 1;
+                    block_len_next = block_len - 1;
+                    loader_data_next = ioctl_dout;
+                    loader_wr_next = 1;
                 end else begin	// Move to next block in chain
                     state_next = GET_TYPE;
-                    out_loader_wr = 0;
+                    loader_wr_next = 0;
                 end
             end
         end
         IGNORE: begin
             if(ioctl_wr) begin
                 if(block_len > 0) begin
-                    block_len = block_len - 1;
+                    block_len_next = block_len - 1;
                 end else begin
                     if(block_type == 8'd0 || block_type == 8'd2) begin
                         state_next = IDLE; 
-                        out_loader_download = 0;
+                        loader_download_next = 0;
                     end else state_next = GET_TYPE;
                 end
             end
         end
     endcase
+end
+
+reg [8:0] block_len = 9'd0;
+reg [7:0] block_type = 8'd0;
+reg [ADDR-1:0] block_addr = {ADDR{1'b0}};
+reg old_download = 0; 
+reg trigger_start = 0;
+
+// Output stage
+always @(posedge clock, posedge reset)
+begin 
+    if (reset) begin
+        old_download = 0;
+        trigger_start = 0;
+        loader_wr <= 0;
+        loader_download <= 0;
+        loader_addr <= {ADDR{1'b0}};
+        loader_data <= {DATA{1'b0}};
+        execute_addr <= {ADDR{1'b0}};
+        execute_enable <= 0;
+        ioctl_wait <= 0;
+        block_len <= 9'd0;
+        block_type <= 8'd0;
+        block_addr <= {ADDR{1'b0}};
+    end
+    else begin
+        loader_wr <= loader_wr_next;
+        loader_download <= loader_download_next;
+        loader_addr <= loader_addr_load ? block_addr : loader_addr_inc ? loader_addr + 1 : loader_addr;
+        loader_data <= loader_data_next;
+        execute_addr <= execute_addr_next;
+        execute_enable <= execute_enable_next;
+        ioctl_wait <= ioctl_wait_next;
+        block_len <= block_len_next;
+        block_type <= block_type_next;
+        block_addr <= block_addr_next;
+        if(~old_download && ioctl_download && ioctl_index > 1) begin
+            trigger_start <= 1; 
+            old_download <= ioctl_download;
+        end else trigger_start <= 0;
+    end
 end
 endmodule

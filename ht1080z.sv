@@ -216,7 +216,7 @@ wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
 
-loader cmd_loader
+cmd_loader cmd_loader
 (
 	.clock(clk_sys),
 	.reset(reset),
