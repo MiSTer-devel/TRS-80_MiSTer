@@ -60,13 +60,14 @@ module cmd_loader
 typedef enum bit [2:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE} loader_states;
 loader_states state;
 
+logic [8:0] block_len;
+logic [7:0] block_type;
+logic [15:0] block_addr;
+logic old_download = 0;
+logic first_block;
+
 always_ff @(posedge clock or posedge reset)
 begin
-	logic [8:0] block_len;
-	logic [7:0] block_type;
-	logic [15:0] block_addr;
-	logic old_download;
-	logic first_block;
 
 	if (reset)
 	begin
@@ -74,7 +75,7 @@ begin
 		loader_addr <= '0;
 		execute_addr <= '0;
 		loader_data <= '0;
-		old_download <= 0;
+	//	old_download <= 0;
 		state <= IDLE;
 		loader_download <= 0;
 		ioctl_wait <= 0;
