@@ -237,12 +237,12 @@ cmd_loader cmd_loader
 
 wire trsram_wr;			// Writing loader data to ram 
 wire trsram_download;	// Download in progress (active high)
-wire [15:0] trsram_addr;
+wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
 
 assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
 assign trsram_download = loader_download ? loader_download : ioctl_download;
-assign trsram_addr = loader_download ? {4'b0, loader_addr} : {|ioctl_index,ioctl_addr};
+assign trsram_addr = loader_download ? {8'b0, loader_addr} : {|ioctl_index,ioctl_addr};
 assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
