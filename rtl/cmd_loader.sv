@@ -91,7 +91,7 @@ wire [8:0] block_len_next;
 wire [7:0] block_type_next;
 wire [ADDR-1:0] block_addr_next;
 
-always @(state, ioctl_download, ioctl_index, ioctl_wr, ioctl_wait, ioctl_dout, block_type, block_len, block_addr, loader_download, trigger_start)
+always @(state, ioctl_download, ioctl_index, ioctl_wr, ioctl_dout, block_type, block_len, block_addr, loader_download, trigger_start)
 begin
 
     loader_wr_next = 0;
@@ -105,7 +105,7 @@ begin
     execute_enable_next = 0;
     loader_addr_load = 0;
 
-    ioctl_wait_next = ioctl_wait;
+    ioctl_wait_next = 0;
     block_len_next = block_len;
     block_type_next = block_type;
     state_next = state;
