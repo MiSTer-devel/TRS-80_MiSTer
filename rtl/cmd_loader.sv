@@ -57,7 +57,7 @@ module cmd_loader
     output logic execute_enable   	        // Jump to start address (out_execute_addr) - Not implemented
 ); 
 
-typedef enum bit [2:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE} loader_states;
+typedef enum bit [3:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE, INVALID} loader_states;
 loader_states state;
 
 logic [8:0] block_len;
@@ -131,7 +131,7 @@ begin
 			GET_MSB: begin
 				if(ioctl_wr) begin
 					block_addr[15:8] <= ioctl_dout;
-					ioctl_wait <= 1;
+					ioctl_wait <= 0; // should maybe be 1?
 					state <= SETUP;
 				end 
 			end
@@ -174,10 +174,18 @@ begin
 						if(block_type == 8'd0 || block_type == 8'd2) begin
 							state <= IDLE; 
 							loader_download <= 0;
-						end else state <= GET_TYPE;
+                        end else begin
+                            state <= GET_TYPE;
+                        end
 					end
 				end
 			end
+            INVALID: begin
+                state <= GET_TYPE;
+            end
+            default: begin
+                state <= INVALID;
+            end
 		endcase
         // Reset back when ioctl download ends
         if(old_download && ~ioctl_download && ioctl_index > 1) begin
