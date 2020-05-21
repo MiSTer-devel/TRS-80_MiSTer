@@ -58,7 +58,10 @@ module cmd_loader
     output logic [31:0] iterations          // Used for debugging via SignalTap
 ); 
 
-typedef enum bit [2:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE} loader_states;
+const bit [15:0] SYSTEM_ENTRY_LSB='h40DF;
+const bit [15:0] SYSTEM_ENTRY_MSB='h40E0;
+
+typedef enum bit [3:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH} loader_states;
 loader_states state;
 
 logic [8:0] block_len;
@@ -150,18 +153,14 @@ begin
                 else if (block_type == 8'd2) begin	
 					execute_addr <= block_addr;
 					execute_enable <= 1;	// toggle execute flag
-                    //ioctl_wait <= 1;
-					if(block_len > 2)  begin
-						state <= IGNORE; 
-					end 
-                    else begin
-						loader_download <= 0;
-						state <= IDLE; 
-					end					
+                    state <= EXECUTE;
+                    // Write into system entry point for '/'
+                    loader_addr <= SYSTEM_ENTRY_LSB;
+                    loader_data <= block_addr[7:0];
+                    loader_wr <= 1;
 				end 
                 else begin	// Should only ever be 1 or 2, so error state
-					loader_download <= 0;
-					state <= IDLE;
+					state <= FINISH;
 				end
 			end
 			TRANSFER: begin
@@ -191,18 +190,33 @@ begin
                     end
                 end else begin	// Move to next block in chain
                     if(block_type == 8'd0 || block_type == 8'd2) begin
-                        state <= IDLE; 
-                        loader_download <= 0;
+                        state <= FINISH; 
                     end else begin
                         //ioctl_wait <= 1;
                         state <= GET_TYPE;
                     end
                 end
 			end
+            EXECUTE: begin
+                loader_addr <= SYSTEM_ENTRY_MSB;
+                loader_data <= block_addr[15:8];
+                loader_wr <= 1;
+                if(block_len > 2)  begin
+                	state <= IGNORE; 
+                end 
+                else begin
+                	state <= FINISH; 
+                end					
+            end
+            FINISH: begin
+                loader_download <= 0;
+                state <= IDLE;
+            end
 		endcase
         // Increment iteration counter
         // Reset back when ioctl download ends
         if(old_download && ~ioctl_download && ioctl_index > 1) begin
+            old_download <= 0;
             loader_download <= 0;
         end
 	end
