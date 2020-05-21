@@ -54,10 +54,11 @@ module cmd_loader
     output logic [ADDR-1:0] loader_addr,    // Address in ram to write data to
     output logic [DATA-1:0] loader_data,    // Data to write to ram
     output logic [ADDR-1:0] execute_addr,   // Start address for program start
-    output logic execute_enable   	        // Jump to start address (out_execute_addr) - Not implemented
+    output logic execute_enable,   	        // Jump to start address (out_execute_addr) - Not implemented
+    output logic [31:0] iterations          // Used for debugging via SignalTap
 ); 
 
-typedef enum bit [3:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE, INVALID} loader_states;
+typedef enum bit [2:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, IGNORE} loader_states;
 loader_states state;
 
 logic [8:0] block_len;
@@ -80,12 +81,16 @@ begin
 		loader_download <= 0;
 		ioctl_wait <= 0;
 		block_addr <= '0;
+        iterations <= 0;
+        first_block <= 0;
 	end 
 	else begin
 
 		loader_wr <= '0;
 		ioctl_wait <= '0;
 		execute_enable <= 0;
+
+        iterations <= iterations + 32'd1;   // Used for debugging
 
 		case(state)
 			IDLE: begin 		// No transfer occurring
@@ -110,13 +115,15 @@ begin
 						case(ioctl_dout)
 						8'd2: block_len <= 9'd256;
 						8'd1: block_len <= 9'd0;
-						default: block_len <= ((ioctl_dout - 2 ) & 9'd255);
+						default: block_len <= 9'((ioctl_dout - 2 ) & 9'd255);
 						endcase
 						state <= GET_LSB;
-					end else if(block_type == 8'd2) begin
+					end 
+                    else if (block_type == 8'd2) begin
 						block_len <= 9'd0;
 						state <= GET_LSB;
-					end else begin
+					end 
+                    else begin
 						block_len <= ioctl_dout;
 						state <= IGNORE;
 					end
@@ -137,27 +144,38 @@ begin
 			end
 			SETUP: begin		
 				if(block_type == 8'd1) begin	// Data block
-					loader_addr <= block_addr;
+					//loader_addr <= block_addr;
 					state <= TRANSFER;
-				end if(block_type == 8'd2) begin	
+                    first_block <= 1;
+                end 
+                else if (block_type == 8'd2) begin	
 					execute_addr <= block_addr;
 					execute_enable <= 1;	// toggle execute flag
+                    ioctl_wait <= 1;
 					if(block_len > 2)  begin
 						state <= IGNORE; 
-					end else begin
+					end 
+                    else begin
 						loader_download <= 0;
 						state <= IDLE; 
 					end					
-				end else begin	// Shoudl only ever be 1 or 2, so error state
+				end 
+                else begin	// Should only ever be 1 or 2, so error state
 					loader_download <= 0;
 					state <= IDLE;
 				end
 			end
 			TRANSFER: begin
 				if(ioctl_wr) begin
-					if(block_len > 0) begin
-						loader_addr <= loader_addr + 1;
-						block_len <= block_len - 1;
+					if(block_len > 9'd0) begin
+						if (first_block) begin
+                            loader_addr <= block_addr; 
+                            first_block <= 0;
+                        end
+                        else begin 
+                            loader_addr <= loader_addr + 16'd1;
+                        end
+						block_len <= block_len - 9'd1;
 						loader_data <= ioctl_dout;
 						loader_wr <= 1;
 					end else begin	// Move to next block in chain
@@ -168,8 +186,8 @@ begin
 			end
 			IGNORE: begin
 				if(ioctl_wr) begin
-					if(block_len > 0) begin
-						block_len <= block_len - 1;
+					if(block_len > 9'd0) begin
+						block_len <= block_len - 9'd1;
 					end else begin
 						if(block_type == 8'd0 || block_type == 8'd2) begin
 							state <= IDLE; 
@@ -180,13 +198,8 @@ begin
 					end
 				end
 			end
-            INVALID: begin
-                state <= GET_TYPE;
-            end
-            default: begin
-                state <= INVALID;
-            end
 		endcase
+        // Increment iteration counter
         // Reset back when ioctl download ends
         if(old_download && ~ioctl_download && ioctl_index > 1) begin
             loader_download <= 0;

@@ -216,6 +216,8 @@ wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
 wire loader_wait;
+(* preserve *) wire [31:0] iterations;
+
 
 cmd_loader cmd_loader
 (
@@ -233,7 +235,8 @@ cmd_loader cmd_loader
 	.loader_addr(loader_addr),
 	.loader_data(loader_data),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable)
+	.execute_enable(execute_enable),
+	.iterations(iterations)		// Debugging only
 );
 
 wire trsram_wr;			// Writing loader data to ram 
