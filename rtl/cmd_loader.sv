@@ -100,7 +100,6 @@ begin
 				end
 			end
 			GET_TYPE: begin		// Start of transfer, load block type
-				ioctl_wait <= 0;
 				if(ioctl_wr) begin
 					block_type <= ioctl_dout;
 					if(ioctl_dout ==8'd0) begin	// EOF
@@ -138,7 +137,7 @@ begin
 			GET_MSB: begin
 				if(ioctl_wr) begin
 					block_addr[15:8] <= ioctl_dout;
-					ioctl_wait <= 0; // should maybe be 1?
+					//ioctl_wait <= 0; // should maybe be 1?
 					state <= SETUP;
 				end 
 			end
@@ -151,7 +150,7 @@ begin
                 else if (block_type == 8'd2) begin	
 					execute_addr <= block_addr;
 					execute_enable <= 1;	// toggle execute flag
-                    ioctl_wait <= 1;
+                    //ioctl_wait <= 1;
 					if(block_len > 2)  begin
 						state <= IGNORE; 
 					end 
@@ -166,37 +165,39 @@ begin
 				end
 			end
 			TRANSFER: begin
-				if(ioctl_wr) begin
-					if(block_len > 9'd0) begin
-						if (first_block) begin
+                if(block_len > 9'd0) begin
+                    if(ioctl_wr) begin
+                        if (first_block) begin
                             loader_addr <= block_addr; 
                             first_block <= 0;
                         end
                         else begin 
                             loader_addr <= loader_addr + 16'd1;
                         end
-						block_len <= block_len - 9'd1;
-						loader_data <= ioctl_dout;
-						loader_wr <= 1;
-					end else begin	// Move to next block in chain
-						state <= GET_TYPE;
-						loader_wr <= 0;
-					end
-				end
+                        block_len <= block_len - 9'd1;
+                        loader_data <= ioctl_dout;
+                        loader_wr <= 1;
+    				end
+                end else begin	// Move to next block in chain
+                    state <= GET_TYPE;
+                    //ioctl_wait <= 1;
+                    loader_wr <= 0;
+                end
 			end
 			IGNORE: begin
-				if(ioctl_wr) begin
-					if(block_len > 9'd0) begin
-						block_len <= block_len - 9'd1;
-					end else begin
-						if(block_type == 8'd0 || block_type == 8'd2) begin
-							state <= IDLE; 
-							loader_download <= 0;
-                        end else begin
-                            state <= GET_TYPE;
-                        end
-					end
-				end
+                if(block_len > 9'd0) begin
+                    if(ioctl_wr) begin
+                        block_len <= block_len - 9'd1;
+                    end
+                end else begin	// Move to next block in chain
+                    if(block_type == 8'd0 || block_type == 8'd2) begin
+                        state <= IDLE; 
+                        loader_download <= 0;
+                    end else begin
+                        //ioctl_wait <= 1;
+                        state <= GET_TYPE;
+                    end
+                end
 			end
 		endcase
         // Increment iteration counter
