@@ -38,7 +38,8 @@
 module cmd_loader
 #( parameter
         DATA = 8,                           // Data bus width
-        ADDR = 16                           // Address bus width
+        ADDR = 16,                          // Address bus width
+        INDEX = 2                           // Index of file type in menu
 )
 (
     input wire clock, reset,                // I/O clock and async reset
@@ -47,6 +48,7 @@ module cmd_loader
 	input wire  [7:0]       ioctl_index,    // Menu index used to upload the file
 	input wire              ioctl_wr,       // Signal be ioctl to write data (receive)
 	input wire [DATA-1:0]   ioctl_dout,     // Data being sent into the loader by ioctl
+    input wire [23:0]       ioctl_addr,     // Offset into loaded file
 	output logic            ioctl_wait,     // Signal from the laoder to hold the current output data
 
     output logic loader_wr,			        // Signal to write to ram
@@ -97,7 +99,7 @@ begin
 
 		case(state)
 			IDLE: begin 		// No transfer occurring
-				if(~old_download && ioctl_download && ioctl_index > 1) begin
+				if(~old_download && ioctl_download && ioctl_index==INDEX && ioctl_addr == '0) begin
 					loader_download <= 1;
 					state <= GET_TYPE;
 				end
@@ -215,9 +217,10 @@ begin
 		endcase
         // Increment iteration counter
         // Reset back when ioctl download ends
-        if(old_download && ~ioctl_download && ioctl_index > 1) begin
+        if(old_download && ~ioctl_download && ioctl_index == INDEX) begin
             old_download <= 0;
             loader_download <= 0;
+            state <= IDLE;
         end
 	end
 end

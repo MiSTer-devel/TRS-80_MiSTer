@@ -227,6 +227,7 @@ cmd_loader cmd_loader
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
 	.ioctl_dout(ioctl_data),
+	.ioctl_addr(ioctl_addr),
 	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
 
