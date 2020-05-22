@@ -153,8 +153,6 @@ begin
                     first_block <= 1;
                 end 
                 else if (block_type == 8'd2) begin	
-					execute_addr <= block_addr;
-					execute_enable <= 1;	// toggle execute flag
                     state <= EXECUTE;
                     // Write into system entry point for '/'
                     loader_addr <= SYSTEM_ENTRY_LSB;
@@ -203,6 +201,9 @@ begin
                 loader_addr <= SYSTEM_ENTRY_MSB;
                 loader_data <= block_addr[15:8];
                 loader_wr <= 1;
+				execute_addr <= block_addr;
+				execute_enable <= 1;	// toggle execute flag
+
                 if(block_len > 2)  begin
                 	state <= IGNORE; 
                 end 
