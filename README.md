@@ -11,7 +11,7 @@ Mist homepage:
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
-##To load a cassette game:
+### To load a cassette game:
 ```
   return
   system
@@ -20,7 +20,7 @@ https://www.classic-computers.org.nz/system-80/driving_instructions.htm
   / 
 ```
 
-##To load a CMD file:
+### To load a CMD file:
 just select it in the OSD. Some CMD files won't work if they access disk rom routines. Sometimes a clean reboot is necessary before loading a CMD.
 
 ## Features:
