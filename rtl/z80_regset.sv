@@ -42,7 +42,7 @@ module z80_regset
 (
     input wire [15:0] execute_addr,     // Start address for program start
     input wire execute_enable,   	    // Jump to start address (out_execute_addr) - Not implemented
-    input wire [211:0] dir_in,       // Z80 Register set as defined in T80pa / T80
+    //input wire [211:0] dir_in,       // Z80 Register set as defined in T80pa / T80
 
     output logic [211:0] dir_out,       // Z80 Register set as defined in T80pa / T80
     output logic dir_set                // Signal to set registers
@@ -51,20 +51,20 @@ module z80_regset
 always_comb
 begin
     dir_out[211:0] <= {
-        //2'b0,               // 211-210 - IFF2, IFF1
-        //2'b0,               // 209-208 - IM
-        //127'b0,             // 207-080 - Regular and Alt registers
-        dir_in[211:80],
+        2'b0,               // 211-210 - IFF2, IFF1
+        2'b0,               // 209-208 - IM
+        127'b0,             // 207-080 - Regular and Alt registers
+        //dir_in[211:80],
         execute_addr[15:8], // 079-071 - PCH
         execute_addr[7:0],  // 071-064 - PCL
         SP_ADDR[15:8],      // 063-056 - SPH
         SP_ADDR[7:0],       // 055-048 - SPL
-        dir_in[47:0]
-        //8'b0,               // 047-040 - R
-        //8'b0,               // 039-032 - I
-        //8'b1,               // 031-024 - Fp
-        //8'b1,               // 023-016 - Ap
-        //16'b1               // 015-000 - ACC
+        //dir_in[47:0]
+        8'b0,               // 047-040 - R
+        8'b0,               // 039-032 - I
+        8'b1,               // 031-024 - Fp
+        8'b1,               // 023-016 - Ap
+        16'b1               // 015-000 - ACC
     };
 end
 

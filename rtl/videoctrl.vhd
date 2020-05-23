@@ -55,6 +55,7 @@ entity videoctrl is
 		din       : in  STD_LOGIC_VECTOR (7 downto 0);
 		dout      : out STD_LOGIC_VECTOR (7 downto 0);
 
+		debug_enable : in STD_LOGIC;
 		dbugmsg_addr : out STD_LOGIC_VECTOR (5 downto 0);
 		dbugmsg_data : in STD_LOGIC_VECTOR (7 downto 0);
 
@@ -574,7 +575,7 @@ end process;
 
 hact <= '1' when hctr>=hstart and hctr<hstart+hsize else '0';
 vact <= '1' when vctr>=vstart and vctr<vstart+vsize else '0';
-vdebug <= '1' when vctr>=vstart-12 and vctr<vstart else '0';
+vdebug <= '1' when vctr>=vstart-12 and vctr<vstart and debug_enable='1' else '0';
 
 hdisp <= '1' when hctr>=hsynlen and hctr<hend else '0';
 vdisp <= '1' when vctr>=vsynlen and vctr<vend else '0';

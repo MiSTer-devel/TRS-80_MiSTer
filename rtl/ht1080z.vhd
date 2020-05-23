@@ -180,7 +180,7 @@ component z80_regset is
 	port (
 		execute_addr    : in std_logic_vector(15 downto 0);
 		execute_enable  : in std_logic;
-		dir_in			: in std_logic_vector(211 downto 0);
+--		dir_in			: in std_logic_vector(211 downto 0);
 		
 		dir_out			: out std_logic_vector(211 downto 0);
 		dir_set			: out std_logic
@@ -255,7 +255,7 @@ signal widemode : std_logic := '0';
 --signal REG std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
 signal DIRSet : std_logic := '0';
 signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
-signal REG : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+--signal REG : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
 -- Gated CPU clock
 signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
 
@@ -268,7 +268,7 @@ port map
 (
 	execute_addr => execute_addr,
 	execute_enable => execute_enable,
-	dir_in => REG,
+--	dir_in => REG,
 
 	dir_out	=> DIR,
 	dir_set => DIRSet
@@ -327,7 +327,7 @@ port map
 	A       => cpua,
 	DI      => cpudi,
 	DO      => cpudo,
-	REG		=> REG,
+--	REG		=> REG,
 	DIR		=> DIR,
 	DIRSet	=> DIRSet
 );
@@ -362,8 +362,9 @@ port map
 	din => cpudo,
 	dout => vramdo,
 	
-		dbugmsg_addr => dbugmsg_addr,
-		dbugmsg_data => dbugmsg_data,
+	debug_enable => '0',			-- Enable to show disk debugging
+	dbugmsg_addr => dbugmsg_addr,
+	dbugmsg_data => dbugmsg_data,
 
 	mreq => cpumreq,
 	iorq => cpuiorq,
