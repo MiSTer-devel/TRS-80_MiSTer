@@ -88,6 +88,30 @@ end ht1080z;
 
 architecture Behavioral of ht1080z is
 
+
+--
+-- This is a static line of test to display on the debug line
+-- It is meant to be overidden at points with any changing data values
+--
+type debugbuf is array(0 to 63) of std_logic_vector(7 downto 0);
+
+signal msgbuf : debugbuf:=(
+x"44",x"65",x"62",x"75",x"67",x"20",x"4D",x"65",x"73",x"73",x"61",x"67",x"65",x"20",x"20",x"20",
+x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",
+x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",
+x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20"
+);
+
+--
+-- hex digit lookup helper array, to simplify debug output
+--
+type hexdigit is array(0 to 15) of std_logic_vector(7 downto 0);
+
+signal hex : hexdigit:=(
+x"30",x"31",x"32",x"33",x"34",x"35",x"36",x"37",x"38",x"39",x"41",x"42",x"43",x"44",x"45",x"46"
+);
+
+
 component dpram is
 generic (
 	DATA : integer;
@@ -189,6 +213,9 @@ signal romrd,ramrd,ramwr,vramsel,kbdsel : std_logic;
 signal ior,iow,memr,memw : std_logic;
 
 
+signal reg_37ec : std_logic_vector(7 downto 0) := x"00";
+signal write_reg_37ec : std_logic := '0';
+
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
@@ -199,6 +226,11 @@ signal ht_rgb_white	: std_logic_vector(17 downto 0);
 signal ht_rgb_green	: std_logic_vector(17 downto 0);
 signal ht_rgb_amber	: std_logic_vector(17 downto 0);
 
+
+signal dbugmsg_addr  : STD_LOGIC_VECTOR (5 downto 0);
+signal dbugmsg_data  : STD_LOGIC_VECTOR (7 downto 0);
+
+
 signal io_ram_addr	: std_logic_vector(23 downto 0);
 signal iorrd,iorrd_r	: std_logic;
 
@@ -207,12 +239,12 @@ alias  tapemotor		: std_logic is tapebits(2);
 
 signal taperead		: std_logic := '0';						-- only when motor is on, 0 = write, 1 = read
 signal tape_cyccnt	: std_logic_vector(11 downto 0);		-- CPU cycle counter for cassette carrier signal
-signal tape_leadin	: std_logic_vector(7 downto 0);		-- additional 128 bits for sync-up, just in case
+--signal tape_leadin	: std_logic_vector(7 downto 0);		-- additional 128 bits for sync-up, just in case
 signal tape_bitptr	: natural := 7;
 
 signal tapebit_val	: std_logic := '0';						-- represents bit being sent from cassette file
 signal tapelatch		: std_logic := '0';						-- represents input bit from cassette (after signal conditioning)
-signal tapelatch_resetcnt	: std_logic_vector(3 downto 0) := "0000";	-- when port is read, reset value - but only after a few cycles
+--signal tapelatch_resetcnt	: std_logic_vector(3 downto 0) := "0000";	-- when port is read, reset value - but only after a few cycles
 
 signal speaker : std_logic_vector(7 downto 0);
 
@@ -329,6 +361,10 @@ port map
 	a => cpua(13 downto 0),
 	din => cpudo,
 	dout => vramdo,
+	
+		dbugmsg_addr => dbugmsg_addr,
+		dbugmsg_data => dbugmsg_data,
+
 	mreq => cpumreq,
 	iorq => cpuiorq,
 	wr => cpuwr,
@@ -347,6 +383,44 @@ port map
 	hb => hblank,
 	vb => vblank
 );
+
+
+--
+-- setup debug output message
+--
+process(clk42m)
+begin
+	if rising_edge(clk42m) then
+
+		-- test write into 0x37EC register.
+		-- currently not working; fix later
+		--
+		if (write_reg_37ec='1') then
+			reg_37ec <= cpudo;
+		end if;
+
+		-- override columns 14/15 to display hex for register reg_37ec:
+		if (dbugmsg_addr = 14) then								--	column 14
+			dbugmsg_data <= hex(conv_integer(reg_37ec(7 downto 4)));
+
+		elsif (dbugmsg_addr = 15) then							--	column 15
+			dbugmsg_data <= hex(conv_integer(reg_37ec(3 downto 0)));
+
+		--
+		-- otherwise split the remainder: first half just reads from the default text buffer,
+		-- and second half is a calculated value based on position
+		--
+		elsif (dbugmsg_addr < 32) then							-- 1st half from string literal
+			dbugmsg_data <= msgbuf(conv_integer( dbugmsg_addr ));
+		else
+			dbugmsg_data <= (dbugmsg_addr + x"40");			-- last half calculated
+		end if;
+		
+	end if;
+end process;
+
+write_reg_37ec <= '1' when cpua(15 downto 0)=x"37EC" and memw='0' else '0';
+
 
 kbdpar : keyboard
 port map
@@ -497,10 +571,10 @@ begin
 
 		tapebits<="000";
 		tape_cyccnt <= x"000";
-		tape_leadin <= x"00";
+--		tape_leadin <= x"00";
 		tape_bitptr <= 7;
 		tapelatch <='0';
-		tapelatch_resetcnt <="0000";
+--		tapelatch_resetcnt <="0000";
 		
 	else
 		if rising_edge(clk42m) then
@@ -561,7 +635,7 @@ begin
 					if tapemotor='1' and taperead='0' then		-- reading the port while motor is on implies tape playback
 						taperead <= '1';
 						tape_cyccnt <= x"000";
-						tape_leadin <= x"00";
+--						tape_leadin <= x"00";
 					end if;
 				end if;
 
