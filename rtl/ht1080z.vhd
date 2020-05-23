@@ -78,7 +78,11 @@ Port (
 	dn_go      : in  std_logic;
 	dn_wr      : in  std_logic;
 	dn_addr    : in  std_logic_vector(24 downto 0);
-	dn_data    : in  std_logic_vector(7 downto 0)
+	dn_data    : in  std_logic_vector(7 downto 0);
+
+	loader_download : in std_logic;
+	execute_addr	: in std_logic_vector(15 downto 0);
+	execute_enable	: in std_logic
 );
 end ht1080z;
 
@@ -145,6 +149,20 @@ port (
 );
 end component;
 
+component z80_regset is
+--	generic (
+--		SP_ADDR : integer
+--	);
+	port (
+		execute_addr    : in std_logic_vector(15 downto 0);
+		execute_enable  : in std_logic;
+		dir_in			: in std_logic_vector(211 downto 0);
+		
+		dir_out			: out std_logic_vector(211 downto 0);
+		dir_set			: out std_logic
+	);
+end component ;
+
 signal ch_a  : std_logic_vector(7 downto 0);
 signal ch_b  : std_logic_vector(7 downto 0);
 signal ch_c  : std_logic_vector(7 downto 0);
@@ -201,7 +219,28 @@ signal speaker : std_logic_vector(7 downto 0);
 signal inkpulse, paperpulse, borderpulse : std_logic;
 signal widemode : std_logic := '0';
 
+-- Z80 Register control
+--signal REG std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+signal DIRSet : std_logic := '0';
+signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+signal REG : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+-- Gated CPU clock
+signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
+
 begin
+
+GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
+
+regset : z80_regset
+port map
+(
+	execute_addr => execute_addr,
+	execute_enable => execute_enable,
+	dir_in => REG,
+
+	dir_out	=> DIR,
+	dir_set => DIRSet
+);
 
 led <= taperead;
 
@@ -242,12 +281,12 @@ vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
-cpu : entity work.T80s
+cpu : entity work.T80pa
 port map
 (
 	RESET_n => not reset,
 	CLK     => clk42m, -- 1.75 MHz
-	CEN     => cpuClk,
+	CEN_p   => GCLK,
 	M1_n    => cpum1,
 	MREQ_n  => cpumreq,
 	IORQ_n  => cpuiorq,
@@ -255,7 +294,10 @@ port map
 	WR_n    => cpuwr,
 	A       => cpua,
 	DI      => cpudi,
-	DO      => cpudo
+	DO      => cpudo,
+	REG		=> REG,
+	DIR		=> DIR,
+	DIRSet	=> DIRSet
 );
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
@@ -449,7 +491,7 @@ ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 
 process (clk42m,dn_go,reset)
 begin
-	if dn_go='1' or reset='1' then
+	if (dn_go='1' and loader_download='0') or reset='1' then
 		io_ram_addr <= x"010000"; -- above 64k
 		iorrd_r<='0';
 
