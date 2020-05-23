@@ -118,7 +118,8 @@ begin
 					if(block_type == 8'd1) begin
 						case(ioctl_dout)
 						8'd2: block_len <= 9'd256;
-						8'd1: block_len <= 9'd0;
+						8'd1: block_len <= 9'd255;
+						8'd0: block_len <= 9'd254;
 						default: block_len <= 9'((ioctl_dout - 2 ) & 9'd255);
 						endcase
 						state <= GET_LSB;
@@ -155,9 +156,9 @@ begin
                 else if (block_type == 8'd2) begin	
                     state <= EXECUTE;
                     // Write into system entry point for '/'
-                    loader_addr <= SYSTEM_ENTRY_LSB;
-                    loader_data <= block_addr[7:0];
-                    loader_wr <= 1;
+                    //loader_addr <= SYSTEM_ENTRY_LSB;
+                    //loader_data <= block_addr[7:0];
+                    //loader_wr <= 1;
 				end 
                 else begin	// Should only ever be 1 or 2, so error state
 					state <= FINISH;
@@ -198,9 +199,9 @@ begin
                 end
 			end
             EXECUTE: begin
-                loader_addr <= SYSTEM_ENTRY_MSB;
-                loader_data <= block_addr[15:8];
-                loader_wr <= 1;
+                //loader_addr <= SYSTEM_ENTRY_MSB;
+                //loader_data <= block_addr[15:8];
+                //loader_wr <= 1;
 				execute_addr <= block_addr;
 				execute_enable <= 1;	// toggle execute flag
 
