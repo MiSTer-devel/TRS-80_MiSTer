@@ -1,5 +1,7 @@
 //============================================================================
 //  HT1080Z port to MiSTer
+//  Renamed to TRS-80 after Cassette and CMD loading support
+//  
 //  Copyright (c) 2019 Alan Steremberg - alanswx
 //
 //
@@ -137,7 +139,7 @@ assign LED_USER  = ioctl_download;
 
 `include "build_id.v"
 localparam CONF_STR = {
-	"HT1080Z;;",
+	"TRS-80;;",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",

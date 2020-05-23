@@ -6,4 +6,4 @@ set_global_assignment -name VERILOG_FILE rtl/dpram.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ym2149.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cmd_loader.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/z80_regset.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ht1080z.sv
+set_global_assignment -name SYSTEMVERILOG_FILE TRS-80.sv

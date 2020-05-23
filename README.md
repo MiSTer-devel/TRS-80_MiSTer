@@ -1,5 +1,8 @@
-# HT1080Z_MiSTer
+# TRS-80_MiSTer
+## Model I Support ##
 port of HT1080Z by Jozsef Laszlo to MiSTer
+renamed TRS-80 after new cassette loading from dshadoff and CMD loading from steddyman
+**rename the ht1080z folder TRS-80 on the MiSTer SD Card if you have it already**
 
 Mist homepage:
   http://joco.homeserver.hu/fpga/mist_ht1080z_en.html
@@ -7,7 +10,7 @@ Mist homepage:
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
-To load a cassette game:
+###To load a cassette game:
 ```
   return
   system
@@ -15,6 +18,9 @@ To load a cassette game:
   [type the first letter of the file you want to load (e or g for the disk images provided)]
   / 
 ```
+
+###To load a CMD file:
+just select it in the OSD. Some CMD files won't work if they access disk rom routines. Sometimes a clean reboot is necessary before loading a CMD.
 
 ## Features:
  * Simulates a TRS-80 Model I with 48KB installed (currently no expansion interface or disk drives)
