@@ -138,6 +138,7 @@ assign LED_USER  = ioctl_download;
 `include "build_id.v"
 localparam CONF_STR = {
 	"HT1080Z;;",
+	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
@@ -155,7 +156,7 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE
 };
 
-wire clk_sys;
+(* preserve *) wire clk_sys;
 pll pll
 (
 	.refclk   (CLK_50M),
@@ -170,6 +171,7 @@ wire        ioctl_wr;
 wire [15:0] ioctl_addr;
 wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
+wire		ioctl_wait;
 
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
@@ -199,11 +201,54 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_data),
+	.ioctl_wait(ioctl_wait),
 	.ioctl_index(ioctl_index)
 );
 
-wire rom_download = ioctl_download && !ioctl_index;
+wire rom_download = ioctl_download && ioctl_index==0;
 wire reset = RESET | status[0] | buttons[1] | rom_download;
+
+// signals from loader
+wire loader_wr;		
+wire loader_download;
+wire [15:0] loader_addr;
+wire [7:0] loader_data;
+wire [15:0] execute_addr;
+wire execute_enable;
+wire loader_wait;
+(* preserve *) wire [31:0] iterations;
+
+
+cmd_loader cmd_loader
+(
+	.clock(clk_sys),
+	.reset(reset),
+
+	.ioctl_download(ioctl_download),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_dout(ioctl_data),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_index(ioctl_index),
+	.ioctl_wait(ioctl_wait),
+
+	.loader_wr(loader_wr),
+	.loader_download(loader_download),
+	.loader_addr(loader_addr),
+	.loader_data(loader_data),
+	.execute_addr(execute_addr),
+	.execute_enable(execute_enable),
+	.iterations(iterations)		// Debugging only
+);
+
+wire trsram_wr;			// Writing loader data to ram 
+wire trsram_download;	// Download in progress (active high)
+wire [23:0] trsram_addr;
+wire [7:0] trsram_data;
+
+assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
+assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 0;
+assign trsram_addr = loader_download ? {8'b0, loader_addr} : {|ioctl_index,ioctl_addr};
+assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
 
@@ -235,10 +280,14 @@ ht1080z ht1080z
 	.flicker(status[14]),
 
 	.dn_clk(clk_sys),
-	.dn_go(ioctl_download),
-	.dn_wr(ioctl_wr),
-	.dn_addr({|ioctl_index,ioctl_addr}),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
-	.dn_data(ioctl_data)
+	.dn_go(trsram_download),
+	.dn_wr(trsram_wr),
+	.dn_addr(trsram_addr),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
+	.dn_data(trsram_data),
+
+	.loader_download(loader_download),
+	.execute_addr(execute_addr),
+	.execute_enable(execute_enable)
 );
 
 ///////////////////////////////////////////////////

@@ -54,6 +54,11 @@ entity videoctrl is
 		a         : in  STD_LOGIC_VECTOR (13 downto 0);
 		din       : in  STD_LOGIC_VECTOR (7 downto 0);
 		dout      : out STD_LOGIC_VECTOR (7 downto 0);
+
+		debug_enable : in STD_LOGIC;
+		dbugmsg_addr : out STD_LOGIC_VECTOR (5 downto 0);
+		dbugmsg_data : in STD_LOGIC_VECTOR (7 downto 0);
+
 		mreq      : in  STD_LOGIC;
 		iorq      : in  STD_LOGIC;
 		wr        : in  STD_LOGIC;
@@ -66,7 +71,7 @@ entity videoctrl is
 		rgbi      : out STD_LOGIC_VECTOR (3 downto 0);	
 		ce_pix    : out STD_LOGIC;
 		overscan  : in  STD_LOGIC_VECTOR (1 downto 0);
-		flicker	  : in  STD_LOGIC;
+		flicker	 : in  STD_LOGIC;
 		hsync     : out STD_LOGIC;
 		vsync     : out STD_LOGIC;
 		hb        : out STD_LOGIC;
@@ -378,6 +383,8 @@ signal hpos : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
 
 signal ce   : std_logic;
 
+signal vdebug : std_logic;
+
 signal hact,vact : std_logic;			-- '1' if inside active display area
 signal hdisp,vdisp : std_logic;		-- '1' if inside CRT scanning area (includes borders)
 signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay area (includes partial borders)
@@ -385,6 +392,8 @@ signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay 
 signal border : std_logic_vector(3 downto 0) := "0000";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
+signal dashbrd : std_logic_vector(3 downto 0) := "1011";
+
 signal  vid_addr : std_logic_vector(9 downto 0);
 
 signal screen : std_logic;
@@ -482,13 +491,17 @@ process(clk42)
 begin
 	if rising_edge(clk42) then
 		if ce = '1' then
-			if (cs='0' and flicker='1') then
-				chrGrap <= x"00";	-- Black line on video contention
-			else 
-				if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
-					chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
-				else
-					chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+			if (vdebug='1') then
+				chrGrap <= chrmem(conv_integer( dbugmsg_data & vpos ));
+			else
+				if (cs='0' and flicker='1') then
+					chrGrap <= x"00";	-- Black line on video contention
+				else 
+					if (chrCode < x"20" and lcasetype = '0') then	-- if lowercase type is default, then display uppercase instead of symbols
+						chrGrap <= chrmem(conv_integer( (chrCode + x"40") & vpos ));
+					else
+						chrGrap <= chrmem(conv_integer( chrCode & vpos ));
+					end if;
 				end if;
 			end if;
 		end if;
@@ -496,6 +509,7 @@ begin
 end process;
 
 vid_addr <=  vaVert & vaHoriz(5 downto 1) & (vaHoriz(0) and not widemode);
+dbugmsg_addr <= vaHoriz(5 downto 0);
 
 vram : dpram
 generic map (
@@ -561,6 +575,7 @@ end process;
 
 hact <= '1' when hctr>=hstart and hctr<hstart+hsize else '0';
 vact <= '1' when vctr>=vstart and vctr<vstart+vsize else '0';
+vdebug <= '1' when vctr>=vstart-12 and vctr<vstart and debug_enable='1' else '0';
 
 hdisp <= '1' when hctr>=hsynlen and hctr<hend else '0';
 vdisp <= '1' when vctr>=vsynlen and vctr<vend else '0';
@@ -586,7 +601,7 @@ begin
 				end if;
 			end if;
 
-			if hact='1' and vact='1' then
+			if hact='1' and (vact='1' or vdebug='1') then
 				if hpos=5 then
 					hpos <= "000";
 					vaHoriz <= vaHoriz+1;
@@ -596,7 +611,7 @@ begin
 						shiftReg <= shiftReg(6 downto 0) & '0';
 					end if;
 				else
-					if (widemode = '0' or ( hpos(0) = '1') ) then	-- if widemode, only shift half the time
+					if (widemode = '0' or ( hpos(0) = '1') or vdebug='1') then	-- if widemode, only shift half the time
 						shiftReg <= shiftReg(6 downto 0) & '0';
 					end if;
 					hpos <= hpos+1;
@@ -612,11 +627,13 @@ begin
 					vaVert<= "0000";
 					vpos <= "0000";
 
-				elsif vact='1' and hctr=hstart+hsize+2 then
+				elsif (vact='1' or vdebug='1') and hctr=hstart+hsize+2 then
 					-- end of a scanline
 					if vpos=11 then
 						vpos <= "0000";
-						vaVert <= vaVert+1;
+						if (vdebug='0') then
+							vaVert <= vaVert+1;
+						end if;
 					else
 						vpos <= vpos+1;
 					end if;
@@ -626,6 +643,6 @@ begin
 	end if;
 end process;
 
-rgbi <= border when screen='0' else paper when shiftReg(5)='0' else ink;
+rgbi <= border when screen='0' else paper when shiftReg(5)='0' else dashbrd when vdebug='1' else ink ;
 
 end Behavioral;
