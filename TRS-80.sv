@@ -158,7 +158,7 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE
 };
 
-(* preserve *) wire clk_sys;
+wire clk_sys;
 pll pll
 (
 	.refclk   (CLK_50M),
@@ -174,6 +174,17 @@ wire [15:0] ioctl_addr;
 wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
 wire		ioctl_wait;
+wire [31:0] sd_lba;
+wire  [1:0] sd_rd;
+wire  [1:0] sd_wr;
+wire        sd_ack;
+wire  [7:0] sd_buff_addr;
+wire [15:0] sd_buff_dout;
+wire [15:0] sd_buff_din;
+wire        sd_buff_wr;
+wire  [1:0] img_mounted;
+wire        img_readonly;
+wire [63:0] img_size;
 
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
@@ -204,7 +215,20 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_data),
 	.ioctl_wait(ioctl_wait),
-	.ioctl_index(ioctl_index)
+	.ioctl_index(ioctl_index),
+
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size)
 );
 
 wire rom_download = ioctl_download && ioctl_index==0;
@@ -218,8 +242,7 @@ wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
 wire loader_wait;
-(* preserve *) wire [31:0] iterations;
-
+//(* preserve *) wire [31:0] iterations;
 
 cmd_loader cmd_loader
 (
@@ -238,8 +261,8 @@ cmd_loader cmd_loader
 	.loader_addr(loader_addr),
 	.loader_data(loader_data),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable),
-	.iterations(iterations)		// Debugging only
+	.execute_enable(execute_enable)
+//	.iterations(iterations)		// Debugging only
 );
 
 wire trsram_wr;			// Writing loader data to ram 
@@ -254,7 +277,21 @@ assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
 
-ht1080z ht1080z
+wire [1:0] fdc_wp = 2'b0;
+wire       fdc_irq;
+wire       fdc_drq;
+wire [1:0] fdc_addr;
+wire       fdc_sel;
+wire       fdc_rw;
+wire [7:0] fdc_din;
+wire [7:0] fdc_dout;
+
+// Map all such broken accesses to drive A only
+//wire [1:0] floppy_sel = 2'b10;	// ** Need to change from code
+
+//wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
+
+trs80 trs80
 (
 	.reset(reset),
 	.clk42m(clk_sys),
@@ -289,7 +326,21 @@ ht1080z ht1080z
 
 	.loader_download(loader_download),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable)
+	.execute_enable(execute_enable),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size),
+
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_dout_strobe(sd_buff_wr)
+
 );
 
 ///////////////////////////////////////////////////

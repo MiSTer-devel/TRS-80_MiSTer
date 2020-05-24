@@ -44,7 +44,7 @@ use IEEE.STD_LOGIC_ARITH.ALL;
 use IEEE.STD_LOGIC_UNSIGNED.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
-entity ht1080z is
+entity trs80 is
 Port (
 	reset      : in  std_logic;
 
@@ -82,11 +82,24 @@ Port (
 
 	loader_download : in std_logic;
 	execute_addr	: in std_logic_vector(15 downto 0);
-	execute_enable	: in std_logic
-);
-end ht1080z;
+	execute_enable	: in std_logic;
 
-architecture Behavioral of ht1080z is
+	img_mounted   	: in std_logic_vector(1 downto 0);
+	img_readonly   	: in std_logic_vector(1 downto 0);
+	img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
+
+	sd_lba 	  		: out std_logic_vector(31 downto 0);
+	sd_rd		   	: out std_logic_vector(1 downto 0);
+	sd_wr		   	: out std_logic_vector(1 downto 0);
+	sd_ack	    	: in std_logic;
+	sd_buff_addr   	: in std_logic_vector(7 downto 0);
+	sd_buff_dout   	: in std_logic_vector(7 downto 0);
+	sd_buff_din	   	: out std_logic_vector(7 downto 0);
+	sd_dout_strobe 	: in std_logic
+);
+end trs80;
+
+architecture Behavioral of trs80 is
 
 
 --
@@ -187,6 +200,46 @@ component z80_regset is
 	);
 end component ;
 
+component fdc1772 is
+		generic (
+			CLK : integer;		-- Main system clock
+			CLK_EN : integer;	-- Clock in kHz
+			SECTOR_SIZE_CODE : std_logic_vector(1 downto 0);
+			SECTOR_BASE : integer
+		);
+		port (
+			clkcpu  		: in std_logic;
+			clk8m_en  		: in std_logic;
+
+			floppy_drive    : in std_logic_vector(3 downto 0);
+			floppy_side		: in std_logic;
+			floppy_reset	: in std_logic;
+
+			irq				: out std_logic;
+			drq				: out std_logic;
+
+			cpu_addr    	: in std_logic_vector(1 downto 0);
+			cpu_sel	    	: in std_logic;
+			cpu_rw	    	: in std_logic;
+			cpu_din	    	: in std_logic_vector(7 downto 0);
+			cpu_dout    	: out std_logic_vector(7 downto 0);
+			
+			img_mounted   	: in std_logic_vector(1 downto 0);
+			img_wp		   	: in std_logic_vector(1 downto 0);
+			img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
+
+
+			sd_lba 	  		: out std_logic_vector(31 downto 0);
+			sd_rd		   	: out std_logic_vector(1 downto 0);
+			sd_wr		   	: out std_logic_vector(1 downto 0);
+			sd_ack	    	: in std_logic;
+			sd_buff_addr   	: in std_logic_vector(7 downto 0);
+			sd_dout		   	: in std_logic_vector(7 downto 0);
+			sd_din		   	: out std_logic_vector(7 downto 0);
+			sd_dout_strobe 	: in std_logic
+		);
+end component ;
+
 signal ch_a  : std_logic_vector(7 downto 0);
 signal ch_b  : std_logic_vector(7 downto 0);
 signal ch_c  : std_logic_vector(7 downto 0);
@@ -202,6 +255,7 @@ signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
 signal cpuclk,cpuclk_r : std_logic;
+signal clk_8mhz : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo,kbdout : std_logic_vector(7 downto 0);
@@ -219,6 +273,7 @@ signal write_reg_37ec : std_logic := '0';
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
+signal clk_8mhz_div : std_logic_vector(5 downto 0) := "000100";
 
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 
@@ -259,6 +314,16 @@ signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, I
 -- Gated CPU clock
 signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
 
+-- Disk controller signals
+signal fdc_irq : std_logic;
+signal fdc_drq : std_logic;
+signal fdc_wp : std_logic_vector(1 downto 0); -- = "00";
+signal fdc_addr : std_logic_vector(1 downto 0);
+signal fdc_sel : std_logic;
+signal fdc_rw : std_logic;
+signal fdc_din : std_logic_vector(7 downto 0);
+signal fdc_dout : std_logic_vector(7 downto 0);
+
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -276,6 +341,63 @@ port map
 
 led <= taperead;
 
+-- Generate 8(ish) Mhz clock for Disk Interface
+process(clk42m)
+begin
+	if rising_edge(clk42m) then
+		clk_8mhz <= '0';
+
+		-- CPU clock divider
+		if clk_8mhz_div = "000000" then	-- count down rather than up, as overclock may change
+			clk_8mhz <= '1';
+			clk_8mhz_div <= "000100";   -- speed =  8.4 Mhz (42MHz / 5)
+		else
+			clk_8mhz_div <= clk_8mhz_div - 1;
+		end if;
+	end if;
+end process;
+
+fdc : fdc1772
+generic map (
+	CLK => 42578000,		-- sys_clk speed
+	CLK_EN => 8400,			-- 8400 Khz
+	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
+	SECTOR_BASE => 0
+)
+port map
+(
+	clkcpu	=> clk42m,
+	clk8m_en => clk_8mhz,
+
+	floppy_drive => "0001",			-- ** Link up to drive select code
+	floppy_side => '0',				-- Only single sided for now
+	floppy_reset => reset,
+
+	irq => fdc_irq,					
+	drq => fdc_drq,
+
+	cpu_addr => cpua(1 downto 0),
+	cpu_sel => fdc_sel,
+	cpu_rw => memr,
+	cpu_din => cpudi,
+	cpu_dout => fdc_dout,
+
+	-- The following signals are all passed in from the Top module
+	img_mounted => img_mounted,
+	img_wp => img_readonly,
+	img_size => img_size,
+
+	sd_lba => sd_lba,
+	sd_rd => sd_rd,
+	sd_wr => sd_wr,
+	sd_ack => sd_ack,
+	sd_buff_addr => sd_buff_addr,
+	sd_dout => sd_buff_dout,
+	sd_din => sd_buff_din,
+	sd_dout_strobe => sd_dout_strobe
+);
+
+-- Generate main CPU Clock
 process(clk42m)
 begin
 	if rising_edge(clk42m) then
@@ -313,6 +435,8 @@ vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
+fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" and cpumreq='0' else '0';
+
 cpu : entity work.T80pa
 port map
 (
@@ -333,7 +457,8 @@ port map
 );
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
-         kbdout when kbdsel='1' else												-- keyboard ($3800-$3BFF)
+		 kbdout when kbdsel='1' else	
+		 fdc_dout when fdc_sel='1' else											-- keyboard ($3800-$3BFF)
 			
 			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
@@ -421,7 +546,6 @@ begin
 end process;
 
 write_reg_37ec <= '1' when cpua(15 downto 0)=x"37EC" and memw='0' else '0';
-
 
 kbdpar : keyboard
 port map
@@ -564,7 +688,7 @@ port map
 ram_a_addr <= dn_addr(16 downto 0) when dn_wr = '1' else io_ram_addr(16 downto 0);
 ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 
-process (clk42m,dn_go,reset)
+process (clk42m,dn_go,loader_download,reset)
 begin
 	if (dn_go='1' and loader_download='0') or reset='1' then
 		io_ram_addr <= x"010000"; -- above 64k
