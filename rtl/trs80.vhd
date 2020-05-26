@@ -269,6 +269,7 @@ signal ior,iow,memr,memw : std_logic;
 
 signal reg_37ec : std_logic_vector(7 downto 0) := x"00";
 signal write_reg_37ec : std_logic := '0';
+signal read_reg_37ec : std_logic := '0';
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
@@ -323,7 +324,7 @@ signal fdc_sel : std_logic;
 signal fdc_rw : std_logic;
 signal fdc_din : std_logic_vector(7 downto 0);
 signal fdc_dout : std_logic_vector(7 downto 0);
-
+signal fdc_drive : std_logic_vector(1 downto 0);
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -360,26 +361,26 @@ end process;
 fdc : fdc1772
 generic map (
 	CLK => 42578000,		-- sys_clk speed
-	CLK_EN => 8400,			-- 8400 Khz
+	CLK_EN => 1780,			-- 8400 Khz
 	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
 	SECTOR_BASE => 0
 )
 port map
 (
 	clkcpu	=> clk42m,
-	clk8m_en => clk_8mhz,
+	clk8m_en => GCLK,
 
-	floppy_drive => "0001",			-- ** Link up to drive select code
-	floppy_side => '0',				-- Only single sided for now
-	floppy_reset => reset,
+	floppy_drive => "1110",			-- ** Link up to drive select code
+	floppy_side => '1',				-- Only single sided for now
+	floppy_reset => not reset,
 
 	irq => fdc_irq,					
 	drq => fdc_drq,
 
 	cpu_addr => cpua(1 downto 0),
-	cpu_sel => fdc_sel,
-	cpu_rw => memr,
-	cpu_din => cpudi,
+	cpu_sel => '0',
+	cpu_rw => memw,
+	cpu_din => fdc_din,
 	cpu_dout => fdc_dout,
 
 	-- The following signals are all passed in from the Top module
@@ -435,6 +436,7 @@ vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
+fdc_din <= not cpudo;
 fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" and cpumreq='0' else '0';
 
 cpu : entity work.T80pa
@@ -458,7 +460,7 @@ port map
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
-		 fdc_dout when fdc_sel='1' else											-- keyboard ($3800-$3BFF)
+		 (not fdc_din) when fdc_sel='1' else											-- keyboard ($3800-$3BFF)
 			
 			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
@@ -487,7 +489,7 @@ port map
 	din => cpudo,
 	dout => vramdo,
 	
-	debug_enable => '0',			-- Enable to show disk debugging
+	debug_enable => '1',			-- Enable to show disk debugging
 	dbugmsg_addr => dbugmsg_addr,
 	dbugmsg_data => dbugmsg_data,
 

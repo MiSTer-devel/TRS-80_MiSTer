@@ -140,6 +140,8 @@ assign LED_USER  = ioctl_download;
 `include "build_id.v"
 localparam CONF_STR = {
 	"TRS-80;;",
+	"S0,DSKDMKJV1,Mount Disk;",
+	"-;",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
