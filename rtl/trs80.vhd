@@ -220,7 +220,8 @@ component fdc1772 is
 
 			cpu_addr    	: in std_logic_vector(1 downto 0);
 			cpu_sel	    	: in std_logic;
-			cpu_rw	    	: in std_logic;
+			cpu_rd	    	: in std_logic;
+			cpu_wr	    	: in std_logic;
 			cpu_din	    	: in std_logic_vector(7 downto 0);
 			cpu_dout    	: out std_logic_vector(7 downto 0);
 			
@@ -321,7 +322,8 @@ signal fdc_drq : std_logic;
 signal fdc_wp : std_logic_vector(1 downto 0); -- = "00";
 signal fdc_addr : std_logic_vector(1 downto 0);
 signal fdc_sel : std_logic;
-signal fdc_rw : std_logic;
+signal fdc_rd : std_logic;
+signal fdc_wr : std_logic;
 signal fdc_din : std_logic_vector(7 downto 0);
 signal fdc_dout : std_logic_vector(7 downto 0);
 signal fdc_drive : std_logic_vector(1 downto 0);
@@ -378,8 +380,9 @@ port map
 	drq => fdc_drq,
 
 	cpu_addr => cpua(1 downto 0),
-	cpu_sel => '0',
-	cpu_rw => memw,
+	cpu_sel => '1',
+	cpu_rd => fdc_rd,
+	cpu_wr => fdc_wr,
 	cpu_din => fdc_din,
 	cpu_dout => fdc_dout,
 
@@ -436,8 +439,10 @@ vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
-fdc_din <= not cpudo;
-fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" and cpumreq='0' else '0';
+fdc_din <= cpudo;
+fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
+fdc_rd <= not fdc_sel or memr;
+fdc_wr <= not fdc_sel or memw;
 
 cpu : entity work.T80pa
 port map
@@ -460,7 +465,7 @@ port map
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
-		 (not fdc_din) when fdc_sel='1' else											-- keyboard ($3800-$3BFF)
+		 fdc_dout when fdc_rd='0' else											-- keyboard ($3800-$3BFF)
 			
 			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 

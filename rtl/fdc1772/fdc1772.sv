@@ -20,6 +20,7 @@
 // TODO: 
 // - 30ms settle time after step before data can be read
 // - implement sector size 0,1
+// SE - Split RW in RD and WR to match TRS-80 hardware
 
 module fdc1772 (
 	input            clkcpu, // system cpu clock.
@@ -36,7 +37,8 @@ module fdc1772 (
 
 	input      [1:0] cpu_addr,
 	input            cpu_sel,
-	input            cpu_rw,
+	input            cpu_rd,
+	input            cpu_wr,
 	input      [7:0] cpu_din,
 	output reg [7:0] cpu_dout,
 
@@ -158,7 +160,7 @@ end
 // -------------------------------------------------------------------------
 reg cpu_selD;
 always @(posedge clkcpu) cpu_selD <= cpu_sel;
-wire cpu_we = ~cpu_selD & cpu_sel & ~cpu_rw;
+wire cpu_we = ~cpu_selD & cpu_sel & ~cpu_wr;
 
 reg irq_set;
 
@@ -923,7 +925,7 @@ localparam FDC_REG_DATA         = 3;
 always @(*) begin
 	cpu_dout = 8'h00;
 
-	if(cpu_sel && cpu_rw) begin
+	if(cpu_sel && !cpu_rd) begin
 		case(cpu_addr)
 			FDC_REG_CMDSTATUS: cpu_dout = status;
 			FDC_REG_TRACK:     cpu_dout = track;
