@@ -334,6 +334,7 @@ signal fdc_drq : std_logic;
 signal fdc_wp : std_logic_vector(1 downto 0); -- = "00";
 signal fdc_addr : std_logic_vector(1 downto 0);
 signal fdc_sel : std_logic;
+signal fdc_sel2 : std_logic;
 signal fdc_rd : std_logic;
 signal fdc_wr : std_logic;
 signal fdc_din : std_logic_vector(7 downto 0);
@@ -396,7 +397,7 @@ port map
 	drq => fdc_drq,
 
 	cpu_addr => cpua(1 downto 0),
-	cpu_sel => fdc_strobe,	-- Calculated on falling edge of fdc_rd or fdc_wr signal
+	cpu_sel => fdc_sel2,	-- Calculated on falling edge of fdc_rd or fdc_wr signal
 	cpu_rd => fdc_rd,
 	cpu_wr => fdc_wr,
 	cpu_din => fdc_din,
@@ -459,6 +460,7 @@ fdc_din <= cpudo;
 fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
 fdc_rd <= not fdc_sel or memr;
 fdc_wr <= not fdc_sel or memw;
+fdc_sel2 <= (fdc_rd xor fdc_wr);
 
 rd_neg_edge : edge_det
 port map
