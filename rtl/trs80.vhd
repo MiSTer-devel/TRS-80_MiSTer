@@ -200,6 +200,18 @@ component z80_regset is
 	);
 end component ;
 
+component edge_det is
+	port (
+		rst			: in std_logic;
+		clk			: in std_logic;
+		ce			: in std_logic;
+		i			: in std_logic;
+		pe			: out std_logic;
+		ne			: out std_logic;
+		ee			: out std_logic
+	);
+end component ;
+
 component fdc1772 is
 		generic (
 			CLK : integer;		-- Main system clock
@@ -327,6 +339,10 @@ signal fdc_wr : std_logic;
 signal fdc_din : std_logic_vector(7 downto 0);
 signal fdc_dout : std_logic_vector(7 downto 0);
 signal fdc_drive : std_logic_vector(1 downto 0);
+signal fdc_strobe : std_logic := '0';
+signal fdc_rd_strobe : std_logic := '0';
+signal fdc_wr_strobe : std_logic := '0';
+
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -370,17 +386,17 @@ generic map (
 port map
 (
 	clkcpu	=> clk42m,
-	clk8m_en => GCLK,
+	clk8m_en => cpuClk,
 
 	floppy_drive => "1110",			-- ** Link up to drive select code
-	floppy_side => '1',				-- Only single sided for now
+	floppy_side => '0',				-- Only single sided for now
 	floppy_reset => not reset,
 
 	irq => fdc_irq,					
 	drq => fdc_drq,
 
 	cpu_addr => cpua(1 downto 0),
-	cpu_sel => '1',
+	cpu_sel => fdc_strobe,	-- Calculated on falling edge of fdc_rd or fdc_wr signal
 	cpu_rd => fdc_rd,
 	cpu_wr => fdc_wr,
 	cpu_din => fdc_din,
@@ -443,6 +459,40 @@ fdc_din <= cpudo;
 fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
 fdc_rd <= not fdc_sel or memr;
 fdc_wr <= not fdc_sel or memw;
+
+rd_neg_edge : edge_det
+port map
+(
+	rst	=> reset,
+	clk => clk42m,
+	ce  => '1',
+	i => fdc_rd,
+	ne => fdc_rd_strobe
+);
+
+wr_neg_edge : edge_det
+port map
+(
+	rst	=> reset,
+	clk => clk42m,
+	ce  => '1',
+	i => fdc_wr,
+	ne => fdc_wr_strobe
+);
+
+fdc_strobe <= fdc_rd_strobe or fdc_wr_strobe; 
+
+-- process(clk42m)
+-- begin
+-- 	if rising_edge(clk42m) then
+-- 		rd_old <= fdc_rd;
+-- 		wr_old <= fdc_wr;
+
+-- 		if(rd_old='1' and fdc_rd='0') then rd_strobe <= '1'; else rd_strobe <= '0'; end if;
+-- 		if(wr_old='1' and fdc_wr='0') then wr_strobe <= '1'; else wr_strobe <= '0'; end if;
+-- 	end if;
+-- end process;
+--fdc_strobe <= rd_strobe or wr_strobe;
 
 cpu : entity work.T80pa
 port map
