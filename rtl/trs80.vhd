@@ -387,10 +387,10 @@ generic map (
 port map
 (
 	clkcpu	=> clk42m,
-	clk8m_en => cpuClk,
+	clk8m_en => GCLK,
 
 	floppy_drive => "1110",			-- ** Link up to drive select code
-	floppy_side => '0',				-- Only single sided for now
+	floppy_side => '1',				-- Only single sided for now
 	floppy_reset => not reset,
 
 	irq => fdc_irq,					
