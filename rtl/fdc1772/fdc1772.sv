@@ -1042,7 +1042,7 @@ module fdc1772_dpram #(ADDRWIDTH=8)
 	output     reg  [7:0] q_b
 );
 
-logic [7:0] ram[0:(1<<(ADDRWIDTH-1))-1];
+logic [7:0] ram[0:(1<<(ADDRWIDTH))-1];
 
 always@(posedge clock) begin
 	if(wren_a) begin
