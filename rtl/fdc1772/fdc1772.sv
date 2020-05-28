@@ -51,8 +51,8 @@ module fdc1772 (
 	output reg [1:0] sd_wr,
 	input            sd_ack,
 	input      [7:0] sd_buff_addr,
-	input     [15:0] sd_dout,
-	output    [15:0] sd_din,
+	input      [7:0] sd_dout,
+	output     [7:0] sd_din,
 	input            sd_dout_strobe
 );
 
@@ -90,7 +90,7 @@ reg   [9:0] gap_len[2]; // gap len/sector
 reg   [1:0] doubleside;
 reg   [3:0] hd;
 
-wire [11:0] image_sectors = img_size[19:8]; // SE - Adjusted for 256 byte sectors
+wire [11:0] image_sectors = {1'b0,img_size[19:9]}; // SE - Adjusted for 256 byte sectors
 reg  [11:0] image_sps; // sectors/side
 reg   [4:0] image_spt; // sectors/track
 reg   [9:0] image_gap_len;
@@ -734,10 +734,10 @@ reg data_transfer_done;
 
 // 0.5/1 kB buffer used to receive a sector as fast as possible from from the io
 // controller. The internal transfer afterwards then runs at 250000 Bit/s
-reg  [SECTOR_SIZE_CODE + 7:0] fifo_cpuptr;
+reg  [SECTOR_SIZE_CODE + 6:0] fifo_cpuptr;
 wire [7:0] fifo_q;
 reg        s_odd; //odd sector
-reg  [SECTOR_SIZE_CODE + 5:0] fifo_sdptr;
+reg  [SECTOR_SIZE_CODE + 6:0] fifo_sdptr;
 
 always @(*) begin
 	if (SECTOR_SIZE_CODE == 3)
@@ -798,7 +798,7 @@ always @(posedge clkcpu) begin
 
 	SD_READ:
 	if (sd_ackD & ~sd_ack) begin
-		if (s_odd || SECTOR_SIZE_CODE != 1) begin
+		if (s_odd || SECTOR_SIZE_CODE != 3) begin
 			sd_state <= SD_IDLE;
 			sd_card_done <= 1; // to be on the safe side now, can be issued earlier
 		end else begin
@@ -809,7 +809,7 @@ always @(posedge clkcpu) begin
 
 	SD_WRITE:
 	if (sd_ackD & ~sd_ack) begin
-		if (s_odd || SECTOR_SIZE_CODE != 1) begin
+		if (s_odd || SECTOR_SIZE_CODE != 3) begin
 			sd_state <= SD_IDLE;
 			sd_card_done <= 1;
 		end else begin
@@ -1027,14 +1027,14 @@ end
 
 endmodule
 
-module fdc1772_dpram #(ADDRWIDTH=9)
+module fdc1772_dpram #(ADDRWIDTH=8)
 (
 	input                 clock,
 
-	input [ADDRWIDTH-2:0] address_a,
-	input          [15:0] data_a, 
+	input [ADDRWIDTH-1:0] address_a,
+	input          [7:0]  data_a, 
 	input                 wren_a,
-	output     reg [15:0] q_a,
+	output     reg [7:0] q_a,
 
 	input [ADDRWIDTH-1:0] address_b,
 	input           [7:0] data_b, 
@@ -1042,7 +1042,7 @@ module fdc1772_dpram #(ADDRWIDTH=9)
 	output     reg  [7:0] q_b
 );
 
-logic [1:0][7:0] ram[0:(1<<(ADDRWIDTH-1))-1];
+logic [7:0] ram[0:(1<<(ADDRWIDTH-1))-1];
 
 always@(posedge clock) begin
 	if(wren_a) begin
@@ -1056,11 +1056,11 @@ end
 
 always@(posedge clock) begin
 	if(wren_b) begin
-		ram[address_b[ADDRWIDTH-1:1]][address_b[0]] <= data_b;
+		ram[address_b] <= data_b;
 		q_b <= data_b;
 	end
 	else begin
-		q_b <= ram[address_b[ADDRWIDTH-1:1]][address_b[0]];
+		q_b <= ram[address_b];
 	end
 end
 
