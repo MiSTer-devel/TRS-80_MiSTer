@@ -92,7 +92,7 @@ Port (
 	sd_rd		   	: out std_logic_vector(1 downto 0);
 	sd_wr		   	: out std_logic_vector(1 downto 0);
 	sd_ack	    	: in std_logic;
-	sd_buff_addr   	: in std_logic_vector(7 downto 0);
+	sd_buff_addr   	: in std_logic_vector(8 downto 0);
 	sd_buff_dout   	: in std_logic_vector(7 downto 0);
 	sd_buff_din	   	: out std_logic_vector(7 downto 0);
 	sd_dout_strobe 	: in std_logic
@@ -246,7 +246,7 @@ component fdc1772 is
 			sd_rd		   	: out std_logic_vector(1 downto 0);
 			sd_wr		   	: out std_logic_vector(1 downto 0);
 			sd_ack	    	: in std_logic;
-			sd_buff_addr   	: in std_logic_vector(7 downto 0);
+			sd_buff_addr   	: in std_logic_vector(8 downto 0);
 			sd_dout		   	: in std_logic_vector(7 downto 0);
 			sd_din		   	: out std_logic_vector(7 downto 0);
 			sd_dout_strobe 	: in std_logic
@@ -343,7 +343,9 @@ signal fdc_drive : std_logic_vector(1 downto 0);
 signal fdc_strobe : std_logic := '0';
 signal fdc_rd_strobe : std_logic := '0';
 signal fdc_wr_strobe : std_logic := '0';
-
+signal floppy_select : std_logic_vector(3 downto 0);
+signal floppy_reg_write : std_logic;
+signal floppy_reg_read : std_logic;
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -380,16 +382,16 @@ end process;
 fdc : fdc1772
 generic map (
 	CLK => 42578000,		-- sys_clk speed
-	CLK_EN => 1780,			-- 8400 Khz
+	CLK_EN => 8400,			-- 8400 Khz
 	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
 	SECTOR_BASE => 0
 )
 port map
 (
 	clkcpu	=> clk42m,
-	clk8m_en => GCLK,
+	clk8m_en => clk_8mhz,
 
-	floppy_drive => "1110",			-- ** Link up to drive select code
+	floppy_drive => floppy_select,			-- ** Link up to drive select code
 	floppy_side => '1',				-- Only single sided for now
 	floppy_reset => not reset,
 
@@ -461,28 +463,45 @@ fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
 fdc_rd <= not fdc_sel or memr;
 fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
+floppy_reg_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
+floppy_reg_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
 
-rd_neg_edge : edge_det
-port map
-(
-	rst	=> reset,
-	clk => clk42m,
-	ce  => '1',
-	i => fdc_rd,
-	ne => fdc_rd_strobe
-);
+process(clk42m, reset)
+begin
+	if reset='1' then
+		floppy_select <= "1111";
+	else
+		if rising_edge(clk42m) then
+			if(floppy_reg_write='1') then
+				floppy_select <= not cpudo(3 downto 0);
+--			else
+--				floppy_select <= floppy_select;
+			end if;
+		end if;
+	end if;
+end process;
 
-wr_neg_edge : edge_det
-port map
-(
-	rst	=> reset,
-	clk => clk42m,
-	ce  => '1',
-	i => fdc_wr,
-	ne => fdc_wr_strobe
-);
+-- rd_neg_edge : edge_det
+-- port map
+-- (
+-- 	rst	=> reset,
+-- 	clk => clk42m,
+-- 	ce  => '1',
+-- 	i => fdc_rd,
+-- 	ne => fdc_rd_strobe
+-- );
 
-fdc_strobe <= fdc_rd_strobe or fdc_wr_strobe; 
+-- wr_neg_edge : edge_det
+-- port map
+-- (
+-- 	rst	=> reset,
+-- 	clk => clk42m,
+-- 	ce  => '1',
+-- 	i => fdc_wr,
+-- 	ne => fdc_wr_strobe
+-- );
+
+-- fdc_strobe <= fdc_rd_strobe or fdc_wr_strobe; 
 
 -- process(clk42m)
 -- begin
@@ -517,9 +536,10 @@ port map
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
-		 fdc_dout when fdc_rd='0' else											-- keyboard ($3800-$3BFF)
-			
-			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
+		 fdc_dout when fdc_rd='0' else	
+		 -- Floppy select and irq signals	
+		 '1' & fdc_irq & "11" & not floppy_select when floppy_reg_read='1' else
+  		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
 

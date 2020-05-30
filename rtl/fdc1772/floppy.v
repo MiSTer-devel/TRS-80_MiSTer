@@ -26,7 +26,7 @@ module floppy (
 	input 	     step_in,
 	input 	     step_out,
 
-	input  [9:0] sector_len,
+	input  [10:0] sector_len,
 	input        sector_base,    // number of first sector on track (archie 0, dos 1)
 	input  [4:0] spt,            // sectors/track
 	input  [9:0] sector_gap_len, // gap len/sector
@@ -44,7 +44,7 @@ module floppy (
 
 // The sysclock is the value all floppy timings are derived from. 
 // Default: 8 MHz
-parameter SYS_CLK = 8000000;
+parameter SYS_CLK = 8400000;
 
 assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
 assign sector_data = (sec_state == SECTOR_STATE_DATA);
@@ -54,8 +54,8 @@ localparam RATESD = 20'd125000;
 localparam RATEDD = 20'd250000;
 localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
-localparam STEPBUSY = 8'd25;       // 18ms after step data can be read
-localparam SPINUP = 10'd1000;       // drive spins up in up to 800ms
+localparam STEPBUSY = 8'd18;       // 18ms after step data can be read
+localparam SPINUP = 10'd500;       // drive spins up in up to 800ms
 localparam SPINDOWN = 10'd300;     // GUESSED: drive spins down in 300ms
 localparam INDEX_PULSE_LEN = 4'd5; // fd1036 data sheet says 1~8ms
 localparam SECTOR_HDR_LEN = 4'd6;  // GUESSED: Sector header is 6 bytes
@@ -145,7 +145,7 @@ localparam SECTOR_STATE_DATA = 2'd2;
 reg [4:0] start_sector = 4'd1;
 
 reg [1:0] sec_state;
-reg [9:0] sec_byte_cnt;  // counting bytes within sectors
+reg [10:0] sec_byte_cnt;  // counting bytes within sectors
 reg [4:0] current_sector = 4'd1;
   
 always @(posedge clk) begin
@@ -181,7 +181,7 @@ always @(posedge clk) begin
 	      
 				endcase
 			end else
-				sec_byte_cnt <= sec_byte_cnt - 10'd1;
+				sec_byte_cnt <= sec_byte_cnt - 11'd1;
 		end
 	end
 end

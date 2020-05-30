@@ -1,5 +1,5 @@
 //
-// fdc1772.v
+// Fdc1772.v
 //
 // Copyright (c) 2015 Till Harbaum <till@harbaum.org>
 //
@@ -50,7 +50,7 @@ module fdc1772 (
 	output reg [1:0] sd_rd,
 	output reg [1:0] sd_wr,
 	input            sd_ack,
-	input      [7:0] sd_buff_addr,
+	input      [8:0] sd_buff_addr,
 	input      [7:0] sd_dout,
 	output     [7:0] sd_din,
 	input            sd_dout_strobe
@@ -67,13 +67,16 @@ localparam SECTOR_SIZE = 11'd128 << SECTOR_SIZE_CODE;
 // --------------------- IO controller image handling ----------------------
 // -------------------------------------------------------------------------
 
+// Rework this to be generic
 always @(*) begin
-	if (SECTOR_SIZE_CODE == 3)
-		// archie
-		sd_lba = {(16'd0 + (fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0], s_odd };
-	else
-		// st
-		sd_lba = ((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0];
+	case(SECTOR_SIZE_CODE)
+		// TRS-80 - 256 bytes
+		2'b01: sd_lba = (((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
+		// Atari ST - 1024 bytes
+		2'b11: sd_lba = {(16'd0 + (fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0], s_odd };
+		// Other
+		default: sd_lba = ((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0];
+	endcase
 end
 
 reg [1:0] floppy_ready = 0;
@@ -127,7 +130,7 @@ always @(*) begin
 			//5'd9, 5'd18: image_gap_len = 10'd176;
 			//5'd10,5'd20: image_gap_len = 10'd107;
 			//5'd11,5'd22: image_gap_len = 10'd50;
-			default : image_gap_len = 10'd2;
+			default : image_gap_len = 10'd1;
 		endcase;
 	end
 end
@@ -627,7 +630,8 @@ always @(posedge clkcpu) begin
 							// the head and the sd-card controller indicates the sector
 							// is in the fifo
 							if(sd_card_done) data_transfer_can_start <= 1;
-							if(fd_ready && fd_sector_hdr && (fd_sector == sector) && data_transfer_can_start) begin
+//							if(fd_ready && fd_sector_hdr && (fd_sector == sector) && data_transfer_can_start) begin
+							if(fd_ready && fd_sector_hdr && data_transfer_can_start) begin
 								data_transfer_can_start <= 0;
 								data_transfer_start <= 1;
 							end
@@ -734,10 +738,10 @@ reg data_transfer_done;
 
 // 0.5/1 kB buffer used to receive a sector as fast as possible from from the io
 // controller. The internal transfer afterwards then runs at 250000 Bit/s
-reg  [SECTOR_SIZE_CODE + 6:0] fifo_cpuptr;
+reg  [9:0] fifo_cpuptr;
 wire [7:0] fifo_q;
 reg        s_odd; //odd sector
-reg  [SECTOR_SIZE_CODE + 6:0] fifo_sdptr;
+reg  [SECTOR_SIZE_CODE + 7:0] fifo_sdptr;
 
 always @(*) begin
 	if (SECTOR_SIZE_CODE == 3)
@@ -746,20 +750,36 @@ always @(*) begin
 		fifo_sdptr = sd_buff_addr;
 end
 
-fdc1772_dpram #(SECTOR_SIZE_CODE + 7) fifo
+// Have to be able to accommodate 512 byte FAT sectors on the SD
+// so force ADDR width to 10, even though only reading first 256 bytes 
+dpram #(.ADDR(9), .DATA(8)) fifo
 (
-	.clock(clkcpu),
+	.a_clk(clkcpu),
+	.a_wr(sd_dout_strobe & sd_ack),
+	.a_addr(fifo_sdptr),
+	.a_din(sd_dout),
+	.a_dout(sd_din),
 
-	.address_a(fifo_sdptr),
-	.data_a(sd_dout),
-	.wren_a(sd_dout_strobe & sd_ack),
-	.q_a(sd_din),
-
-	.address_b(fifo_cpuptr),
-	.data_b(data_in),
-	.wren_b(data_in_strobe),
-	.q_b(fifo_q)
+	.b_clk(clkcpu),
+	.b_wr(data_in_strobe),
+	.b_addr({sector[0], fifo_cpuptr[7:0]}),
+	.b_din(data_in),
+	.b_dout(fifo_q)
 );
+// dpram #(SECTOR_SIZE_CODE + 7) fifo
+// (
+// 	.clock(clkcpu),
+
+// 	.address_a(fifo_sdptr),
+// 	.data_a(sd_dout),
+// 	.wren_a(sd_dout_strobe & sd_ack),
+// 	.q_a(sd_din),
+
+// 	.address_b(fifo_cpuptr),
+// 	.data_b(data_in),
+// 	.wren_b(data_in_strobe),
+// 	.q_b(fifo_q)
+// );
 
 // ------------------ SD card control ------------------------
 localparam SD_IDLE = 0;
@@ -798,24 +818,24 @@ always @(posedge clkcpu) begin
 
 	SD_READ:
 	if (sd_ackD & ~sd_ack) begin
-		if (s_odd || SECTOR_SIZE_CODE != 3) begin
+//		if (s_odd || SECTOR_SIZE_CODE != 3) begin
 			sd_state <= SD_IDLE;
 			sd_card_done <= 1; // to be on the safe side now, can be issued earlier
-		end else begin
-			s_odd <= 1;
-			sd_rd <= ~{ floppy_drive[1], floppy_drive[0] };
-		end
+//		end else begin
+//			s_odd <= 1;
+//			sd_rd <= ~{ floppy_drive[1], floppy_drive[0] };
+//		end
 	end
 
 	SD_WRITE:
 	if (sd_ackD & ~sd_ack) begin
-		if (s_odd || SECTOR_SIZE_CODE != 3) begin
+//		if (s_odd || SECTOR_SIZE_CODE != 3) begin
 			sd_state <= SD_IDLE;
 			sd_card_done <= 1;
-		end else begin
-			s_odd <= 1;
-			sd_wr <= ~{ floppy_drive[1], floppy_drive[0] };
-		end
+//		end else begin
+//			s_odd <= 1;
+//			sd_wr <= ~{ floppy_drive[1], floppy_drive[0] };
+//		end
 	end
 
 	default: ;
@@ -823,10 +843,11 @@ always @(posedge clkcpu) begin
 end
 
 // -------------------- CPU data read/write -----------------------
+reg [10:0] data_transfer_cnt /* synthesis keep */;
 
 always @(posedge clkcpu) begin
 	reg        data_transfer_startD;
-	reg [10:0] data_transfer_cnt;
+	
 
 	// reset fifo read pointer on reception of a new command or 
 	// when multi-sector transfer increments the sector number
@@ -1027,41 +1048,41 @@ end
 
 endmodule
 
-module fdc1772_dpram #(ADDRWIDTH=8)
-(
-	input                 clock,
+// module fdc1772_dpram #(ADDRWIDTH=8)
+// (
+// 	input                 clock,
 
-	input [ADDRWIDTH-1:0] address_a,
-	input          [7:0]  data_a, 
-	input                 wren_a,
-	output     reg [7:0] q_a,
+// 	input [ADDRWIDTH-1:0] address_a,
+// 	input          [7:0]  data_a, 
+// 	input                 wren_a,
+// 	output     reg [7:0] q_a,
 
-	input [ADDRWIDTH-1:0] address_b,
-	input           [7:0] data_b, 
-	input                 wren_b,
-	output     reg  [7:0] q_b
-);
+// 	input [ADDRWIDTH-1:0] address_b,
+// 	input           [7:0] data_b, 
+// 	input                 wren_b,
+// 	output     reg  [7:0] q_b
+// );
 
-logic [7:0] ram[0:(1<<(ADDRWIDTH))-1];
+// logic [7:0] ram[0:(1<<(ADDRWIDTH))-1];
 
-always@(posedge clock) begin
-	if(wren_a) begin
-		ram[address_a] <= data_a;
-		q_a <= data_a;
-	end
-	else begin
-		q_a <= ram[address_a];
-	end
-end
+// always@(posedge clock) begin
+// 	if(wren_a) begin
+// 		ram[address_a] <= data_a;
+// 		q_a <= data_a;
+// 	end
+// 	else begin
+// 		q_a <= ram[address_a];
+// 	end
+// end
 
-always@(posedge clock) begin
-	if(wren_b) begin
-		ram[address_b] <= data_b;
-		q_b <= data_b;
-	end
-	else begin
-		q_b <= ram[address_b];
-	end
-end
+// always@(posedge clock) begin
+// 	if(wren_b) begin
+// 		ram[address_b] <= data_b;
+// 		q_b <= data_b;
+// 	end
+// 	else begin
+// 		q_b <= ram[address_b];
+// 	end
+// end
 
-endmodule
+// endmodule
