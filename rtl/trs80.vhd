@@ -592,6 +592,7 @@ port map
 	CLK     => clk42m, -- 1.75 MHz
 	CEN_p   => GCLK,
 	M1_n    => cpum1,
+	INT_n	=> expansion_irq,
 	MREQ_n  => cpumreq,
 	IORQ_n  => cpuiorq,
 	RD_n    => cpurd,
