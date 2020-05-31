@@ -276,6 +276,7 @@ signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
 signal cpuclk,cpuclk_r : std_logic;
 signal clk_8mhz : std_logic;
+signal clk_25ms : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo,kbdout : std_logic_vector(7 downto 0);
@@ -298,6 +299,8 @@ signal dbg_status : std_logic_vector(7 downto 0);
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
 signal clk_8mhz_div : std_logic_vector(5 downto 0) := "000100";
+signal clk_25ms_div : integer := 1064450;
+signal clk_25ms_irq : std_logic := '0';
 
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 
@@ -356,6 +359,7 @@ signal fdc_wr_strobe : std_logic := '0';
 signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_reg_write : std_logic;
 signal floppy_reg_read : std_logic;
+signal expansion_irq : std_logic := '0';
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -385,6 +389,40 @@ begin
 			clk_8mhz_div <= "000100";   -- speed =  8.4 Mhz (42MHz / 5)
 		else
 			clk_8mhz_div <= clk_8mhz_div - 1;
+		end if;
+	end if;
+end process;
+
+
+-- Generate 25ms clock for RTC in expansion interface
+process(clk42m)
+begin
+	if rising_edge(clk42m) then
+		clk_25ms <= '0';
+
+		-- CPU clock divider
+		if clk_25ms_div = 0 then	-- count down rather than up, as overclock may change
+			clk_25ms <= '1';
+			clk_25ms_div <= 1064450;   -- speed = 25ms for RTC
+		else
+			clk_25ms_div <= clk_25ms_div - 1;
+		end if;
+	end if;
+end process;
+
+-- RTC latch circuit
+process(clk42m, reset)
+begin
+	if reset='1' then
+		clk_25ms_irq <= '0';
+	else
+		if rising_edge(clk42m) then
+			if(clk_25ms='1') then
+				clk_25ms_irq <= '1';
+			end if;
+			if(floppy_reg_read='1') then
+				clk_25ms_irq <= '0';
+			end if;
 		end if;
 	end if;
 end process;
@@ -483,6 +521,7 @@ fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_reg_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
 floppy_reg_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
+expansion_irq <= not (fdc_irq or clk_25ms_irq);
 
 process(clk42m, reset)
 begin
@@ -497,6 +536,7 @@ begin
 	end if;
 end process;
 
+--
 -- process(clk42m)
 -- begin
 -- 	if rising_edge(clk42m) then
@@ -568,7 +608,7 @@ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
 		 fdc_dout when fdc_rd='0' else	
 		 -- Floppy select and irq signals	
-		 '1' & fdc_irq & "11" & not floppy_select when floppy_reg_read='1' else
+		 clk_25ms_irq & fdc_irq & "11" & not floppy_select when floppy_reg_read='1' else
   		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
