@@ -764,7 +764,7 @@ begin
 			dbugmsg_data <= hex(conv_integer(dbg_status(3 downto 0)));
 
 		elsif (dbugmsg_addr = 41) then			-- Tick Counter (after space)
-			if(tick_1ms='0') then
+			if(tick_1s='0') then
 				dbugmsg_data <= x"20";
 			else
 				dbugmsg_data <= x"2a";
