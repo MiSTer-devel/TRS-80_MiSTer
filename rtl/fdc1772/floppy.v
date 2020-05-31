@@ -54,11 +54,11 @@ localparam RATESD = 20'd125000;
 localparam RATEDD = 20'd250000;
 localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
-localparam STEPBUSY = 8'd18;       // 18ms after step data can be read
-localparam SPINUP = 10'd500;       // drive spins up in up to 800ms
-localparam SPINDOWN = 10'd300;     // GUESSED: drive spins down in 300ms
-localparam INDEX_PULSE_LEN = 4'd5; // fd1036 data sheet says 1~8ms
-localparam SECTOR_HDR_LEN = 4'd6;  // GUESSED: Sector header is 6 bytes
+localparam STEPBUSY = 8'd3;       // 18ms after step data can be read
+localparam SPINUP = 10'd50;       // drive spins up in up to 800ms
+localparam SPINDOWN = 10'd3000;     // GUESSED: drive spins down in 300ms
+localparam INDEX_PULSE_LEN = 4'd2; // fd1036 data sheet says 1~8ms
+localparam SECTOR_HDR_LEN = 4'd5;  // GUESSED: Sector header is 6 bytes
 localparam TRACKS = 8'd85;         // max allowed track
 
 // TRS-80 specific values

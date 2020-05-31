@@ -53,7 +53,15 @@ module fdc1772 (
 	input      [8:0] sd_buff_addr,
 	input      [7:0] sd_dout,
 	output     [7:0] sd_din,
-	input            sd_dout_strobe
+	input            sd_dout_strobe,
+
+	// debugging
+	output     [7:0] cmd_out,
+	output     [7:0] track_out,
+	output     [7:0] sector_out,
+	output     [7:0] data_in_out,
+	output     [7:0] status_out
+
 );
 
 parameter CLK = 32000000;
@@ -434,8 +442,8 @@ reg [15:0] step_rate_cnt;
 reg [23:0] delay_cnt;
 
 // flag indicating that a "step" is in progress
-wire step_busy = (step_rate_cnt != 0);
-wire delaying = (delay_cnt != 0);
+(* preserve *) wire step_busy = (step_rate_cnt != 0);
+(* preserve *) wire delaying = (delay_cnt != 0);
 
 reg [7:0] step_to;
 reg RNF;
@@ -631,7 +639,7 @@ always @(posedge clkcpu) begin
 							// is in the fifo
 							if(sd_card_done) data_transfer_can_start <= 1;
 //							if(fd_ready && fd_sector_hdr && (fd_sector == sector) && data_transfer_can_start) begin
-							if(fd_ready && fd_sector_hdr && data_transfer_can_start) begin
+							if(fd_ready && data_transfer_can_start) begin
 								data_transfer_can_start <= 0;
 								data_transfer_start <= 1;
 							end
@@ -935,6 +943,13 @@ wire cmd_type_1 = (cmd[7] == 1'b0);
 wire cmd_type_2 = (cmd[7:6] == 2'b10);
 wire cmd_type_3 = (cmd[7:5] == 3'b111) || (cmd[7:4] == 4'b1100);
 wire cmd_type_4 = (cmd[7:4] == 4'b1101);
+
+// output debugging info
+assign cmd_out = cmd;
+assign track_out = track;
+assign sector_out = sector;
+assign data_in_out = data_in;
+assign status_out = status;
 
 localparam FDC_REG_CMDSTATUS    = 0;
 localparam FDC_REG_TRACK        = 1;
