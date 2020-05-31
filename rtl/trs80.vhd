@@ -301,6 +301,8 @@ signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
 signal clk_8mhz_div : std_logic_vector(5 downto 0) := "000100";
 signal clk_25ms_div : integer := 1064450;
 signal clk_25ms_irq : std_logic := '0';
+signal tick_1s : std_logic := '0';
+signal tick_counter : integer := 40;
 
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 
@@ -422,6 +424,26 @@ begin
 			end if;
 			if(floppy_reg_read='1') then
 				clk_25ms_irq <= '0';
+			end if;
+		end if;
+	end if;
+end process;
+
+-- 1 second tick counter
+process(clk42m, reset)
+begin
+	if reset='1' then
+		tick_1s <= '0';
+		tick_counter <= 40;	-- 40 hz counter
+	else
+		if rising_edge(clk42m) then
+			if clk_25ms='1' then
+				if tick_counter = 0 then
+					tick_1s <= not tick_1s;
+					tick_counter <= 40;
+				else 
+					tick_counter <= tick_counter - 1;
+				end if;
 			end if;
 		end if;
 	end if;
@@ -740,6 +762,14 @@ begin
 			dbugmsg_data <= hex(conv_integer(dbg_status(7 downto 4)));
 		elsif (dbugmsg_addr = 39) then							
 			dbugmsg_data <= hex(conv_integer(dbg_status(3 downto 0)));
+
+		elsif (dbugmsg_addr = 41) then			-- Tick Counter (after space)
+			if(tick_1ms='0') then
+				dbugmsg_data <= x"20";
+			else
+				dbugmsg_data <= x"2a";
+			end if;
+
 		--
 		-- otherwise split the remainder: first half just reads from the default text buffer,
 		-- and second half is a calculated value based on position
