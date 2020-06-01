@@ -273,7 +273,7 @@ wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
 
 assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
-assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 0;
+assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 1'b0;
 assign trsram_addr = loader_download ? {8'b0, loader_addr} : {|ioctl_index,ioctl_addr};
 assign trsram_data = loader_download ? loader_data : ioctl_data;
 

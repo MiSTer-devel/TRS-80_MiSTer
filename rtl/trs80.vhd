@@ -201,18 +201,6 @@ component z80_regset is
 	);
 end component ;
 
-component edge_det is
-	port (
-		rst			: in std_logic;
-		clk			: in std_logic;
-		ce			: in std_logic;
-		i			: in std_logic;
-		pe			: out std_logic;
-		ne			: out std_logic;
-		ee			: out std_logic
-	);
-end component ;
-
 component fdc1772 is
 		generic (
 			CLK : integer;		-- Main system clock
@@ -300,7 +288,6 @@ signal dbg_status : std_logic_vector(7 downto 0);
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
 signal clk_8mhz_div : std_logic_vector(5 downto 0) := "000100";
 signal clk_25ms_div : integer := 1064450;
-signal clk_25ms_irq : std_logic := '0';
 signal tick_1s : std_logic := '0';
 signal tick_counter : integer := 40;
 
@@ -359,9 +346,14 @@ signal fdc_strobe : std_logic := '0';
 signal fdc_rd_strobe : std_logic := '0';
 signal fdc_wr_strobe : std_logic := '0';
 signal floppy_select : std_logic_vector(3 downto 0);
-signal floppy_reg_write : std_logic;
-signal floppy_reg_read : std_logic;
-signal expansion_irq : std_logic := '0';
+signal floppy_select_write : std_logic;
+signal irq_latch_read : std_logic;
+
+signal floppy_irq_latch : std_logic := '1';
+signal clk_25ms_latch : std_logic := '1';
+signal old_fdc_irq : std_logic := '0';
+signal old_clk_25ms : std_logic := '0';
+signal expansion_irq : std_logic := '1';
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -412,18 +404,19 @@ begin
 	end if;
 end process;
 
--- RTC latch circuit
+-- RTC irq latch circuit
 process(clk42m, reset)
 begin
 	if reset='1' then
-		clk_25ms_irq <= '0';
+		clk_25ms_latch <= '1';
 	else
 		if rising_edge(clk42m) then
-			if(clk_25ms='1') then
-				clk_25ms_irq <= '1';
+			old_clk_25ms <= clk_25ms;
+			if(old_clk_25ms='0' and clk_25ms='1') then -- latch on rising edge
+				clk_25ms_latch <= '0';
 			end if;
-			if(floppy_reg_read='1') then
-				clk_25ms_irq <= '0';
+			if(irq_latch_read='1') then -- clear on read of 0x37e0
+				clk_25ms_latch <= '1';
 			end if;
 		end if;
 	end if;
@@ -541,9 +534,9 @@ fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
 fdc_rd <= not fdc_sel or memr;
 fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
-floppy_reg_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
-floppy_reg_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
-expansion_irq <= not (fdc_irq or clk_25ms_irq);
+floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
+irq_latch_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
+expansion_irq <= clk_25ms_latch and floppy_irq_latch;
 
 process(clk42m, reset)
 begin
@@ -551,61 +544,31 @@ begin
 		floppy_select <= "1111";
 	else
 		if rising_edge(clk42m) then
-			if(floppy_reg_write='1') then
+			if(floppy_select_write='1') then
 				floppy_select <= not cpudo(3 downto 0);
 			end if;
 		end if;
 	end if;
 end process;
 
---
--- process(clk42m)
--- begin
--- 	if rising_edge(clk42m) then
--- 		if(fdc_wr='0') then
--- 			case cpua(1 downto 0) is
--- 				when "00" => reg_37ec(7 downto 0) <= cpudo; -- 37ec - command
--- 				when "01" => reg_37ec(15 downto 8) <= cpudo; -- 37ed - track
--- 				when "10" => reg_37ec(23 downto 16) <= cpudo; -- 37ee - sector
--- 				when "11" => reg_37ec(31 downto 24) <= cpudo; -- 37ef - data
--- 			end case;
--- 		end if;
--- 	end if;
--- end process;
-
--- rd_neg_edge : edge_det
--- port map
--- (
--- 	rst	=> reset,
--- 	clk => clk42m,
--- 	ce  => '1',
--- 	i => fdc_rd,
--- 	ne => fdc_rd_strobe
--- );
-
--- wr_neg_edge : edge_det
--- port map
--- (
--- 	rst	=> reset,
--- 	clk => clk42m,
--- 	ce  => '1',
--- 	i => fdc_wr,
--- 	ne => fdc_wr_strobe
--- );
-
--- fdc_strobe <= fdc_rd_strobe or fdc_wr_strobe; 
-
--- process(clk42m)
--- begin
--- 	if rising_edge(clk42m) then
--- 		rd_old <= fdc_rd;
--- 		wr_old <= fdc_wr;
-
--- 		if(rd_old='1' and fdc_rd='0') then rd_strobe <= '1'; else rd_strobe <= '0'; end if;
--- 		if(wr_old='1' and fdc_wr='0') then wr_strobe <= '1'; else wr_strobe <= '0'; end if;
--- 	end if;
--- end process;
---fdc_strobe <= rd_strobe or wr_strobe;
+-- Floppy irq latch to process IRQ pin.  Not related to what is placed on D6
+-- Reset on a read of 0x37e0.  WDDC1772 will reset INTRQ on r/w of 0x37ec
+process(clk42m, reset)
+begin
+	if reset='1' then
+		floppy_irq_latch <= '1';
+	else
+		if rising_edge(clk42m) then
+			old_fdc_irq <= fdc_irq;
+			if(old_fdc_irq='0' and fdc_irq='1') then	-- latch on rising edge
+				floppy_irq_latch <= '0';
+			end if;
+			if(irq_latch_read='1') then		-- Clear on read of register
+				floppy_irq_latch <= '1';
+			end if;
+		end if;
+	end if;
+end process;
 
 cpu : entity work.T80pa
 port map
@@ -631,7 +594,7 @@ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
 		 fdc_dout when fdc_rd='0' else	
 		 -- Floppy select and irq signals	
-		 clk_25ms_irq & fdc_irq & "11" & not floppy_select when floppy_reg_read='1' else
+		 (not clk_25ms_latch) & (not floppy_irq_latch) & "000000" when irq_latch_read='1' else
   		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read

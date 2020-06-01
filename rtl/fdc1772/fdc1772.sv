@@ -919,7 +919,7 @@ always @(posedge clkcpu) begin
 end
 
 // the status byte
-wire [7:0] status = { motor_on, 
+wire [7:0] status = { !motor_on, 
 		      floppy_write_protected,              // wrprot
 		      cmd_type_1?motor_spin_up_done:1'b0,  // data mark
 		      !floppy_present | RNF,               // record not found
