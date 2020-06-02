@@ -450,16 +450,15 @@ reg sector_inc_strobe;
 reg track_inc_strobe;
 reg track_dec_strobe;
 reg track_clear_strobe;
+reg sector_not_found;
 // Status fields that change based on DAM and 
-wire sector_read, sector_write;
-assign sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
-assign sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
+wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
+wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
 	reg [1:0] seek_state;
 	reg notready_wait;
-	reg sector_not_found;
 	reg irq_at_index;
 
 	sector_inc_strobe <= 1'b0;
@@ -922,9 +921,9 @@ always @(posedge clkcpu) begin
 end
 
 // Different logic for fdc1771
-wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : floppy_write_protected;
-wire s5 = cmd_type_1 ? ~&floppy_drive : 1'b0;
-wire s4 = cmd_type_1 ? 1'b0 : !floppy_present | RNF;
+wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? 1'b0 : floppy_write_protected;
+wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : 1'b0;
+wire s4 = sector_not_found;
 // the status byte
 wire [7:0] status = { !motor_on, 
 		      s6,              
