@@ -1,5 +1,5 @@
 //
-// Fdc1772.v
+// Fdc1771.v
 //
 // Copyright (c) 2015 Till Harbaum <till@harbaum.org>
 //
@@ -17,12 +17,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-// TODO: 
-// - 30ms settle time after step before data can be read
-// - implement sector size 0,1
-// SE - Split RW in RD and WR to match TRS-80 hardware
+// June 2012 - Rewritten to work for TRS-80 FDC1771 interface
+//
 
-module fdc1772 (
+module fdc1771 (
 	input            clkcpu, // system cpu clock.
 	input            clk8m_en,
 
@@ -30,6 +28,7 @@ module fdc1772 (
 	input      [3:0] floppy_drive,
 	input            floppy_side, 
 	input            floppy_reset,
+	input			 motor_on,
 
 	// interrupts
 	output reg       irq,
@@ -414,16 +413,16 @@ wire fd_track0 = (fd_track == 0);
 // reached full speed for 5 rotations (800ms spin-up time + 5*200ms =
 // 1.8sec) If the floppy is idle for 10 rotations (2 sec) then the
 // motor is switched off again
-localparam MOTOR_IDLE_COUNTER = 4'd15;
-reg [3:0] motor_timeout_index /* verilator public */;
+//localparam MOTOR_IDLE_COUNTER = 4'd15;
+//reg [3:0] motor_timeout_index /* verilator public */;
 reg indexD;
 reg busy /* verilator public */;
 reg step_in, step_out;
-reg [3:0] motor_spin_up_sequence /* verilator public */;
+//reg [3:0] motor_spin_up_sequence /* verilator public */;
 
 // consider spin up done either if the motor is not supposed to spin at all or
 // if it's supposed to run and has left the spin up sequence
-wire motor_spin_up_done = (!motor_on) || (motor_on && (motor_spin_up_sequence == 0));
+//wire motor_spin_up_done = (!motor_on) || (motor_on && (motor_spin_up_sequence == 0));
 
 // ---------------------------- step handling ------------------------------
 
@@ -451,6 +450,10 @@ reg sector_inc_strobe;
 reg track_inc_strobe;
 reg track_dec_strobe;
 reg track_clear_strobe;
+// Status fields that change based on DAM and 
+wire sector_read, sector_write;
+assign sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
+assign sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
@@ -466,7 +469,7 @@ always @(posedge clkcpu) begin
 	irq_set <= 1'b0;
 
 	if(!floppy_reset) begin
-		motor_on <= 1'b0;
+//		motor_on <= 1'b0;
 		busy <= 1'b0;
 		step_in <= 1'b0;
 		step_out <= 1'b0;
@@ -506,9 +509,9 @@ always @(posedge clkcpu) begin
 			sector_not_found <= 1'b0;
 
 			if(cmd_type_1 || cmd_type_2 || cmd_type_3) begin
-				motor_on <= 1'b1;
+				//motor_on <= 1'b1;
 				// 'h' flag '0' -> wait for spin up
-				if (!motor_on && !cmd[3]) motor_spin_up_sequence <= 6;   // wait for 6 full rotations
+				// (!motor_on && !cmd[3]) motor_spin_up_sequence <= 6;   // wait for 6 full rotations
 			end
 
 			// handle "forced interrupt"
@@ -521,7 +524,7 @@ always @(posedge clkcpu) begin
 
 		// execute command if motor is not supposed to be running or
 		// wait for motor spinup to finish
-		if(busy && motor_spin_up_done && !step_busy && !delaying) begin
+		if(busy && !step_busy && !delaying) begin
 
 			// ------------------------ TYPE I -------------------------
 			if(cmd_type_1) begin
@@ -596,7 +599,7 @@ always @(posedge clkcpu) begin
 				// finish
 				3: begin
 					busy <= 1'b0;
-					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 					irq_set <= 1'b1; // emit irq when command done
 					seek_state <= 0;
 				   end
@@ -613,12 +616,12 @@ always @(posedge clkcpu) begin
 					end else begin
 						RNF <= 1'b1;
 						busy <= 1'b0;
-						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
 					end
 				end else if (sector_not_found) begin
 					busy <= 1'b0;
-					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 					irq_set <= 1'b1; // emit irq when command done
 					RNF <= 1'b1;
 				end else if (cmd[2] && !notready_wait) begin
@@ -648,7 +651,7 @@ always @(posedge clkcpu) begin
 								if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
 								else begin
 									busy <= 1'b0;
-									motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+									//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 									irq_set <= 1'b1; // emit irq when command done
 									RNF <= 1'b0;
 								end
@@ -669,7 +672,7 @@ always @(posedge clkcpu) begin
 								if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
 								else begin
 									busy <= 1'b0;
-									motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+									//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 									irq_set <= 1'b1; // emit irq when command done
 									RNF <= 1'b0;
 								end
@@ -684,20 +687,20 @@ always @(posedge clkcpu) begin
 				if(!floppy_present) begin
 					// no image selected -> send irq immediately
 					busy <= 1'b0; 
-					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 					irq_set <= 1'b1; // emit irq when command done
 				end else begin
 					// read track TODO: fake
 					if(cmd[7:4] == 4'b1110) begin
 						busy <= 1'b0;
-						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
 					end
 
 					// write track TODO: fake
 					if(cmd[7:4] == 4'b1111) begin
 						busy <= 1'b0;
-						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
 					end
 
@@ -709,7 +712,7 @@ always @(posedge clkcpu) begin
 
 						if(data_transfer_done) begin
 							busy <= 1'b0;
-							motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+							//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 							irq_set <= 1'b1; // emit irq when command done
 						end
 					end
@@ -724,15 +727,15 @@ always @(posedge clkcpu) begin
 			if (irq_at_index) irq_set <= 1'b1;
 
 			// led motor timeout run once fdc is not busy anymore
-			if(!busy) begin
-				if(motor_timeout_index != 0)
-					motor_timeout_index <= motor_timeout_index - 4'd1;
-				else
-					motor_on <= 1'b0;
-			end
+			//if(!busy) begin
+				//if(motor_timeout_index != 0)
+				//	motor_timeout_index <= motor_timeout_index - 4'd1;
+				//else
+					//motor_on <= 1'b0;
+			//end
 
-			if(motor_spin_up_sequence != 0)
-				motor_spin_up_sequence <= motor_spin_up_sequence - 4'd1;
+			//if(motor_spin_up_sequence != 0)
+				//motor_spin_up_sequence <= motor_spin_up_sequence - 4'd1;
 		end
 	end
 end
@@ -918,11 +921,15 @@ always @(posedge clkcpu) begin
 	end
 end
 
+// Different logic for fdc1771
+wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : floppy_write_protected;
+wire s5 = cmd_type_1 ? ~&floppy_drive : 1'b0;
+wire s4 = cmd_type_1 ? 1'b0 : !floppy_present | RNF;
 // the status byte
 wire [7:0] status = { !motor_on, 
-		      floppy_write_protected,              // wrprot
-		      cmd_type_1?motor_spin_up_done:1'b0,  // data mark
-		      !floppy_present | RNF,               // record not found
+		      s6,              
+		      s5,  				
+		      s4,               // record not found
 		      1'b0,                                // crc error
 		      cmd_type_1?fd_track0:data_lost,
 		      cmd_type_1?~fd_index:drq,
@@ -934,7 +941,7 @@ reg [7:0] data_in;
 reg [7:0] data_out;
 
 reg step_dir;
-reg motor_on /* verilator public */ = 1'b0;
+//reg motor_on /* verilator public */ = 1'b0;
 reg data_lost;
 
 // ---------------------------- command register -----------------------   
@@ -1063,41 +1070,3 @@ end
 
 endmodule
 
-// module fdc1772_dpram #(ADDRWIDTH=8)
-// (
-// 	input                 clock,
-
-// 	input [ADDRWIDTH-1:0] address_a,
-// 	input          [7:0]  data_a, 
-// 	input                 wren_a,
-// 	output     reg [7:0] q_a,
-
-// 	input [ADDRWIDTH-1:0] address_b,
-// 	input           [7:0] data_b, 
-// 	input                 wren_b,
-// 	output     reg  [7:0] q_b
-// );
-
-// logic [7:0] ram[0:(1<<(ADDRWIDTH))-1];
-
-// always@(posedge clock) begin
-// 	if(wren_a) begin
-// 		ram[address_a] <= data_a;
-// 		q_a <= data_a;
-// 	end
-// 	else begin
-// 		q_a <= ram[address_a];
-// 	end
-// end
-
-// always@(posedge clock) begin
-// 	if(wren_b) begin
-// 		ram[address_b] <= data_b;
-// 		q_b <= data_b;
-// 	end
-// 	else begin
-// 		q_b <= ram[address_b];
-// 	end
-// end
-
-// endmodule

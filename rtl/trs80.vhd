@@ -201,7 +201,7 @@ component z80_regset is
 	);
 end component ;
 
-component fdc1772 is
+component fdc1771 is
 		generic (
 			CLK : integer;		-- Main system clock
 			CLK_EN : integer;	-- Clock in kHz
@@ -215,6 +215,7 @@ component fdc1772 is
 			floppy_drive    : in std_logic_vector(3 downto 0);
 			floppy_side		: in std_logic;
 			floppy_reset	: in std_logic;
+			motor_on		: in std_logic;
 
 			irq				: out std_logic;
 			drq				: out std_logic;
@@ -354,6 +355,12 @@ signal clk_25ms_latch : std_logic := '1';
 signal old_fdc_irq : std_logic := '0';
 signal old_clk_25ms : std_logic := '0';
 signal expansion_irq : std_logic := '1';
+
+type motor_state is (stopped, spinup, running);
+signal fdc_motor_state : motor_state;
+signal fdc_motor_on : std_logic := '0';
+signal fdc_motor_countdown : integer := 0;
+
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -411,8 +418,7 @@ begin
 		clk_25ms_latch <= '1';
 	else
 		if rising_edge(clk42m) then
-			old_clk_25ms <= clk_25ms;
-			if(old_clk_25ms='0' and clk_25ms='1') then -- latch on rising edge
+			if(clk_25ms='1') then -- latch on rising edge
 				clk_25ms_latch <= '0';
 			end if;
 			if(irq_latch_read='1') then -- clear on read of 0x37e0
@@ -442,7 +448,53 @@ begin
 	end if;
 end process;
 
-fdc : fdc1772
+-- Motor controller state machine for auto spinup and spin down
+process(clk42m, reset)
+begin
+	if reset='1' then
+		fdc_motor_state <= stopped;	-- start with motor stopped
+		fdc_motor_countdown <= 0;
+		fdc_motor_on <= '0';
+	else
+		if rising_edge(clk42m) then
+			case fdc_motor_state is
+				when stopped =>	-- Motor off
+					fdc_motor_on <= '0';
+					if(floppy_select_write='1') then
+						fdc_motor_state <= spinup;
+						-- Countdown in 25ms ticks - 0.5 seconds to start
+						fdc_motor_countdown <= 20;
+					end if;
+				when spinup =>	-- Motor spinning up
+					if(fdc_motor_countdown=0) then
+						fdc_motor_state <= running;
+						-- Countdown in 25ms ticks - 3 seconds to idle
+						fdc_motor_countdown <= 40 * 3;
+						fdc_motor_on <= '1';
+					else 
+						if clk_25ms='1' then
+							fdc_motor_countdown <= fdc_motor_countdown - 1;
+						end if;
+					end if;
+				when running => 	-- Motor running
+					if(fdc_motor_countdown=0) then
+						fdc_motor_state <= stopped;	-- idle timeout
+						fdc_motor_on <= '0';
+					else
+						if(floppy_select_write='1') then
+							fdc_motor_countdown <= 40 * 3; -- reset countdown on select
+						else
+							if clk_25ms='1' then
+								fdc_motor_countdown <= fdc_motor_countdown - 1;
+							end if;
+						end if;
+					end if;
+			end case;			
+		end if;
+	end if;
+end process;
+
+fdc : fdc1771
 generic map (
 	CLK => 42578000,		-- sys_clk speed
 	CLK_EN => 8400,			-- 8400 Khz
@@ -457,6 +509,7 @@ port map
 	floppy_drive => floppy_select,			-- ** Link up to drive select code
 	floppy_side => '1',				-- Only single sided for now
 	floppy_reset => not reset,
+	motor_on => fdc_motor_on,
 
 	irq => fdc_irq,					
 	drq => fdc_drq,
