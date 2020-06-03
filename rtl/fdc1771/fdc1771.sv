@@ -54,6 +54,7 @@ module fdc1771 (
 	output     [7:0] sd_din,
 	input            sd_dout_strobe,
 
+	output reg clr_disk_int;
 	// debugging
 	output     [7:0] cmd_out,
 	output     [7:0] track_out,
@@ -760,6 +761,7 @@ always @(*) begin
 		fifo_sdptr = sd_buff_addr;
 end
 
+wire writing_mem = cmd[7:5] == 3'b101 && data_in_strobe ? 1'b1 : 1'b0;
 // Have to be able to accommodate 512 byte FAT sectors on the SD
 // so force ADDR width to 10, even though only reading first 256 bytes 
 dpram #(.ADDR(9), .DATA(8)) fifo
@@ -771,7 +773,7 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 	.a_dout(sd_din),
 
 	.b_clk(clkcpu),
-	.b_wr(data_in_strobe),
+	.b_wr(writing_mem),
 	.b_addr({sector[0], fifo_cpuptr[7:0]}),
 	.b_din(data_in),
 	.b_dout(fifo_q)
@@ -922,7 +924,7 @@ end
 
 // Different logic for fdc1771
 wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? 1'b0 : floppy_write_protected;
-wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : 1'b0;
+wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 wire s4 = sector_not_found;
 // the status byte
 wire [7:0] status = { !motor_on, 
