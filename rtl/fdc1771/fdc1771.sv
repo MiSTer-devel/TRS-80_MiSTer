@@ -935,7 +935,7 @@ end
 logic s6, s5, s4, s2, s1;
 always_comb
 begin
-	if(cmd_type_1) begin
+	if(cmd_type_1 || cmd_type_4) begin
 		s6 = floppy_write_protected;
 		s5 = fd_ready;
 		s4 = RNF; //sector_not_found;
@@ -966,7 +966,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = { notready_wait, 
+wire [7:0] status = {!motor_on, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found

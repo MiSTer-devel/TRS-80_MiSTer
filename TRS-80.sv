@@ -136,12 +136,12 @@ assign AUDIO_MIX = 0;
 assign LED_DISK  = LED;				/* later add disk motor on/off */
 assign LED_POWER = 0;
 assign LED_USER  = ioctl_download;
+// 	"S1,DSKDMKJV1,Mount Disk 1:;",
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"TRS-80;;",
 	"S0,DSKDMKJV1,Mount Disk 0:;",
-	"S1,DSKDMKJV1,Mount Disk 1:;",
 	"-;",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
@@ -196,7 +196,7 @@ wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
+hps_io #(.STRLEN(($size(CONF_STR)>>3)), .WIDE(0), .VDNUM(1) ) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
