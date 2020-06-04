@@ -350,9 +350,7 @@ signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
 
-signal floppy_irq_latch : std_logic := '1';
 signal clk_25ms_latch : std_logic := '1';
-signal old_fdc_irq : std_logic := '0';
 signal old_clk_25ms : std_logic := '0';
 signal expansion_irq : std_logic := '1';
 
@@ -589,7 +587,7 @@ fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
 irq_latch_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
-expansion_irq <= clk_25ms_latch and floppy_irq_latch;
+expansion_irq <= clk_25ms_latch and not fdc_irq;
 
 process(clk42m, reset)
 begin
@@ -599,25 +597,6 @@ begin
 		if rising_edge(clk42m) then
 			if(floppy_select_write='1') then
 				floppy_select <= not cpudo(3 downto 0);
-			end if;
-		end if;
-	end if;
-end process;
-
--- Floppy irq latch to process IRQ pin.  Not related to what is placed on D6
--- Reset on a read of 0x37e0.  WDDC1772 will reset INTRQ on r/w of 0x37ec
-process(clk42m, reset)
-begin
-	if reset='1' then
-		floppy_irq_latch <= '1';
-	else
-		if rising_edge(clk42m) then
-			old_fdc_irq <= fdc_irq;
-			if(old_fdc_irq='0' and fdc_irq='1') then	-- latch on rising edge
-				floppy_irq_latch <= '0';
-			end if;
-			if(irq_latch_read='1') then		-- Clear on read of register
-				floppy_irq_latch <= '1';
 			end if;
 		end if;
 	end if;
@@ -647,7 +626,7 @@ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
 		 fdc_dout when fdc_rd='0' else	
 		 -- Floppy select and irq signals	
-		 (not clk_25ms_latch) & (not floppy_irq_latch) & "000000" when irq_latch_read='1' else
+		 (not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
   		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read

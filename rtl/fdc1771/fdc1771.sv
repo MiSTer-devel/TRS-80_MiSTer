@@ -54,7 +54,6 @@ module fdc1771 (
 	output     [7:0] sd_din,
 	input            sd_dout_strobe,
 
-	output reg clr_disk_int;
 	// debugging
 	output     [7:0] cmd_out,
 	output     [7:0] track_out,
@@ -179,11 +178,17 @@ reg cpu_rw_cmdstatus;
 always @(posedge clkcpu)
   cpu_rw_cmdstatus <= ~cpu_selD && cpu_sel && cpu_addr == FDC_REG_CMDSTATUS;
 
-wire irq_clr = !floppy_reset || cpu_rw_cmdstatus;
+wire irq_clr = !floppy_reset || cpu_rw_cmdstatus || set_irq_clr;
 
+reg old_irq_set=1'b0;
+reg old_irq_clr=1'b0;
+
+// Changed to only trigger on rising edge
 always @(posedge clkcpu) begin
-	if(irq_clr) irq <= 1'b0;
-	else if(irq_set) irq <= 1'b1;
+	old_irq_clr <= irq_clr;
+	old_irq_set <= irq_set;
+	if(~old_irq_clr & irq_clr) irq <= 1'b0;
+	if(~old_irq_set & irq_set) irq <= 1'b1;
 end
 
 reg drq_set;
@@ -455,6 +460,7 @@ reg sector_not_found;
 // Status fields that change based on DAM and 
 wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
 wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
+reg set_irq_clr;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
@@ -467,6 +473,7 @@ always @(posedge clkcpu) begin
 	track_dec_strobe <= 1'b0;
 	track_clear_strobe <= 1'b0;
 	irq_set <= 1'b0;
+	set_irq_clr <=1'b0;
 
 	if(!floppy_reset) begin
 //		motor_on <= 1'b0;
@@ -518,6 +525,7 @@ always @(posedge clkcpu) begin
 			if(cmd_type_4) begin
 				busy <= 1'b0;
 				if(cmd[3]) irq_set <= 1'b1;
+				else set_irq_clr <= 1'b1;	// Else clear interrupt
 				if(cmd[3:2] == 2'b01) irq_at_index <= 1'b1;
 			end
 		 end
@@ -922,21 +930,51 @@ always @(posedge clkcpu) begin
 	end
 end
 
-// Different logic for fdc1771
-wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? 1'b0 : floppy_write_protected;
-wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
-wire s4 = sector_not_found;
+// Different logic for fdc1771 status register
+logic s6, s5, s4, s2, s1;
+always_comb
+begin
+	if(cmd_type_1 || cmd_type_4) begin
+		s6 = floppy_write_protected;
+		s5 = fd_ready;
+		s4 = RNF; // was sector_not_found
+		s2 = fd_track0;
+		s1 = ~fd_index;
+	end else if(cmd_type_2) begin
+		if(sector_read) begin
+			s6 = 1'b0;
+			s5 = (track==8'd17 ? 1'b1 : 1'b0);
+		end else begin	// else sector write
+			s6 = floppy_write_protected;
+			s5 = 1'b0;
+		end
+		s4 = RNF;
+		s2 = data_lost;
+		s1 = drq;
+	end else begin //cmd_type_3 or unknown state
+		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
+		else s6 = 1'b0;
+		s5 = 1'b0;
+		s4 = 1'b0;
+		s2 = data_lost;
+		s1 = drq;
+	end
+end
+
+//wire s6 = cmd_type_1 ? floppy_write_protected : sector_read ? 1'b0 : floppy_write_protected;
+//wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
+//wire s4 = sector_not_found;
 // the status byte
 wire [7:0] status = { !motor_on, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
 		      1'b0,                                // crc error
-		      cmd_type_1?fd_track0:data_lost,
-		      cmd_type_1?~fd_index:drq,
-		      busy } /* synthesis keep */;
+		      s2,
+		      s1,
+		      busy }; /* synthesis keep */
 
-reg [7:0] track /* verilator public */;
+reg [7:0] track; /* verilator public */
 reg [7:0] sector;
 reg [7:0] data_in;
 reg [7:0] data_out;
