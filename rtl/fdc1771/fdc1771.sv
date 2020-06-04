@@ -461,11 +461,12 @@ reg sector_not_found;
 wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
 wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
 reg set_irq_clr;
+reg notready_wait;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
 	reg [1:0] seek_state;
-	reg notready_wait;
+	
 	reg irq_at_index;
 
 	sector_inc_strobe <= 1'b0;
@@ -934,10 +935,10 @@ end
 logic s6, s5, s4, s2, s1;
 always_comb
 begin
-	if(cmd_type_1 || cmd_type_4) begin
+	if(cmd_type_1) begin
 		s6 = floppy_write_protected;
 		s5 = fd_ready;
-		s4 = RNF; // was sector_not_found
+		s4 = RNF; //sector_not_found;
 		s2 = fd_track0;
 		s1 = ~fd_index;
 	end else if(cmd_type_2) begin
@@ -965,7 +966,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = { !motor_on, 
+wire [7:0] status = { notready_wait, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
