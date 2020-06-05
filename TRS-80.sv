@@ -124,24 +124,18 @@ assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQM
 
 assign BUTTONS = 0;
 
-// aspect ratio including all border space is  4:3
-// aspect ratio iwith partial border space is 20:17
-// aspect ratio of only displayed area is     11:10
-assign VIDEO_ARX = status[13] ? 4 : (status[12] ? 20 : 11);
-assign VIDEO_ARY = status[13] ? 3 : (status[12] ? 17 : 10);
-
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK  = LED;				/* later add disk motor on/off */
 assign LED_POWER = 0;
 assign LED_USER  = ioctl_download;
-// 	"S1,DSKDMKJV1,Mount Disk 1:;",
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"TRS-80;;",
 	"S0,DSKDMKJV1,Mount Disk 0:;",
+ 	"S1,DSKDMKJV1,Mount Disk 1:;",
 	"-;",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
@@ -196,7 +190,7 @@ wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3)), .WIDE(0), .VDNUM(1) ) hps_io
+hps_io #(.STRLEN(($size(CONF_STR)>>3)), .WIDE(0), .VDNUM(2) ) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -352,12 +346,18 @@ wire [17:0] RGB;
 wire        HSync,VSync,HBlank,VBlank;
 
 wire  [2:0] scale = status[3:1];
-wire  [2:0] sl = scale ? scale - 1'd1 : 3'd0;
+wire  [2:0] sl = scale > 1'd1 ? scale - 1'd1 : 3'b000;
+
+// aspect ratio including all border space is  4:3
+// aspect ratio iwith partial border space is 20:17
+// aspect ratio of only displayed area is     11:10
+assign VIDEO_ARX = ~|status[13:12] ? 4 : (status[12] ? 40 : 40);
+assign VIDEO_ARY = ~|status[13:12] ? 3 : (status[12] ? 29 : 28);
 
 assign CLK_VIDEO = clk_sys;
 assign VGA_SL = sl[1:0];
 
-video_mixer #(.LINE_LENGTH(640), .GAMMA(1)) video_mixer
+video_mixer #(.LINE_LENGTH(672), .GAMMA(1)) video_mixer
 (
 	.*,
 
@@ -366,7 +366,7 @@ video_mixer #(.LINE_LENGTH(640), .GAMMA(1)) video_mixer
 
 	.scanlines(0),
 	.scandoubler(scale || forced_scandoubler),
-	.hq2x(scale==1),
+	.hq2x(scale==3'b001),
 
 	.mono(0),
 
