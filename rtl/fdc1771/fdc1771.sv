@@ -374,6 +374,7 @@ reg [23:0] delay_cnt;
 // flag indicating that a "step" is in progress
 (* preserve *) wire step_busy = (step_rate_cnt != 0);
 (* preserve *) wire delaying = (delay_cnt != 0);
+wire seeking = (cmd[7:4] == 4'b0001);
 
 reg [7:0] step_to;
 reg RNF;
@@ -467,7 +468,6 @@ always @(posedge clkcpu) begin
 				// evaluate command
 				case (seek_state)
 				0: begin
-					track_not_found <= 0;
 					// restore
 					if(cmd[7:4] == 4'b0000) begin
 						if (fd_track0) begin
@@ -481,6 +481,7 @@ always @(posedge clkcpu) begin
 
 					// seek
 					if(cmd[7:4] == 4'b0001) begin
+						track_not_found <= 0;
 						if (track == step_to) seek_state <= 2;
 						else begin
 							step_dir <= (step_to < track);
@@ -535,14 +536,24 @@ always @(posedge clkcpu) begin
 
 				// finish
 				3: begin
-					busy <= 1'b0;
-					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-					irq_set <= 1'b1; // emit irq when command done
-					seek_state <= 0;
 					if (track >= MAX_TRACK) begin
 						track_not_found <= 1'b1;
+						seek_state <= 4;
+						delay_cnt <= 16'd3*CLK_EN; // DelY
 					end 
+					else begin
+						busy <= 1'b0;
+						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						irq_set <= 1'b1; // emit irq when command done
+						seek_state <= 0;
+					end
 				   end
+				// error state (Required for LDOS)
+				4: begin
+						busy <= 1'b0;
+						irq_set <= 1'b1; // emit irq when command done
+						seek_state <= 0;
+					end
 				endcase
 			end // if (cmd_type_1)
 
@@ -868,8 +879,8 @@ always_comb
 begin
 	if(cmd_type_1 || cmd_type_4) begin
 		s6 = floppy_write_protected & fd_ready;
-		s5 = fd_ready | track_not_found; 	// LDOS fix
-		s4 = RNF; //sector_not_found;
+		s5 = seeking ? track_not_found : fd_ready; 	// LDOS fix
+		s4 = seeking && track_not_found ? 1'b0 : RNF;
 		s2 = fd_track0;
 		s1 = ~fd_index;
 	end else if(cmd_type_2) begin
