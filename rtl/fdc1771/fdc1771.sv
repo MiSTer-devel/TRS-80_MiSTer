@@ -382,6 +382,7 @@ reg track_inc_strobe;
 reg track_dec_strobe;
 reg track_clear_strobe;
 reg sector_not_found;
+reg track_not_found;
 // Status fields that change based on DAM and 
 wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
 wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
@@ -413,6 +414,7 @@ always @(posedge clkcpu) begin
 		seek_state <= 0;
 		notready_wait <= 1'b0;
 		sector_not_found <= 1'b0;
+		track_not_found <= 1'b0;
 		irq_at_index <= 1'b0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
@@ -465,6 +467,7 @@ always @(posedge clkcpu) begin
 				// evaluate command
 				case (seek_state)
 				0: begin
+					track_not_found <= 0;
 					// restore
 					if(cmd[7:4] == 4'b0000) begin
 						if (fd_track0) begin
@@ -480,13 +483,8 @@ always @(posedge clkcpu) begin
 					if(cmd[7:4] == 4'b0001) begin
 						if (track == step_to) seek_state <= 2;
 						else begin
-							if (track >= MAX_TRACK) begin
-								seek_state <= 3;	// Jump to finish
-								RNF <= 1'b1;
-							end else begin
-								step_dir <= (step_to < track);
-								seek_state <= 1;
-							end
+							step_dir <= (step_to < track);
+							seek_state <= 1;
 						end
 					end
 
@@ -541,6 +539,9 @@ always @(posedge clkcpu) begin
 					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 					irq_set <= 1'b1; // emit irq when command done
 					seek_state <= 0;
+					if (track >= MAX_TRACK) begin
+						track_not_found <= 1'b1;
+					end 
 				   end
 				endcase
 			end // if (cmd_type_1)
@@ -867,7 +868,7 @@ always_comb
 begin
 	if(cmd_type_1 || cmd_type_4) begin
 		s6 = floppy_write_protected & fd_ready;
-		s5 = fd_ready;
+		s5 = fd_ready | track_not_found; 	// LDOS fix
 		s4 = RNF; //sector_not_found;
 		s2 = fd_track0;
 		s1 = ~fd_index;
