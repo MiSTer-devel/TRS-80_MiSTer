@@ -62,6 +62,7 @@ module fdc1771 (
 	output     [7:0] sd_din,
 	input            sd_dout_strobe,
 
+	output	   [1:0] drives_mapped,
 	// debugging
 	output     [7:0] cmd_out,
 	output     [7:0] track_out,
@@ -77,6 +78,7 @@ parameter SECTOR_SIZE_CODE = 2'd1; // sec size 0=128, 1=256, 2=512, 3=1024
 parameter SECTOR_BASE = 1'b0; // number of first sector on track (archie 0, dos 1)
 
 localparam SECTOR_SIZE = 11'd128 << SECTOR_SIZE_CODE;
+localparam MAX_TRACK = 8'd250;	// A seek for a track above this will throw RNF
 
 // -------------------------------------------------------------------------
 // --------------------- IO controller image handling ----------------------
@@ -330,6 +332,7 @@ wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1];
 
 wire fd_track0 = (fd_track == 0);
 
+assign drives_mapped = {fd1_ready, fd0_ready};
 // -------------------------------------------------------------------------
 // ----------------------- internal state machines -------------------------
 // -------------------------------------------------------------------------
@@ -477,8 +480,13 @@ always @(posedge clkcpu) begin
 					if(cmd[7:4] == 4'b0001) begin
 						if (track == step_to) seek_state <= 2;
 						else begin
-							step_dir <= (step_to < track);
-							seek_state <= 1;
+							if (track >= MAX_TRACK) begin
+								seek_state <= 3;	// Jump to finish
+								RNF <= 1'b1;
+							end else begin
+								step_dir <= (step_to < track);
+								seek_state <= 1;
+							end
 						end
 					end
 
@@ -828,7 +836,7 @@ always @(posedge clkcpu) begin
 				if(cmd[7:4] == 4'b1100) begin
 					case(data_transfer_cnt)
 						7: data_out <= fd_track;
-						6: data_out <= { 7'b0000000, floppy_side };
+						6: data_out <= 8'b00000000;
 						5: data_out <= fd_sector;
 						4: data_out <= SECTOR_SIZE_CODE; // TODO: sec size 0=128, 1=256, 2=512, 3=1024
 						3: data_out <= 8'ha5;
@@ -858,7 +866,7 @@ logic s6, s5, s4, s2, s1;
 always_comb
 begin
 	if(cmd_type_1 || cmd_type_4) begin
-		s6 = floppy_write_protected;
+		s6 = floppy_write_protected & fd_ready;
 		s5 = fd_ready;
 		s4 = RNF; //sector_not_found;
 		s2 = fd_track0;
@@ -868,14 +876,14 @@ begin
 			s6 = 1'b0;
 			s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
 		end else begin	// else sector write
-			s6 = floppy_write_protected;
+			s6 = floppy_write_protected & fd_ready;
 			s5 = 1'b0;
 		end
 		s4 = RNF;
 		s2 = data_lost;
 		s1 = drq;
 	end else begin //cmd_type_3 or unknown state
-		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
+		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected & fd_ready;	// write track
 		else s6 = 1'b0;
 		s5 = 1'b0;
 		s4 = 1'b0;
@@ -888,7 +896,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = {!motor_on, 
+wire [7:0] status = {!motor_on & fd_ready, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found

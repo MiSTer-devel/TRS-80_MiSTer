@@ -231,7 +231,6 @@ component fdc1771 is
 			img_wp		   	: in std_logic_vector(1 downto 0);
 			img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
 
-
 			sd_lba 	  		: out std_logic_vector(31 downto 0);
 			sd_rd		   	: out std_logic_vector(1 downto 0);
 			sd_wr		   	: out std_logic_vector(1 downto 0);
@@ -240,6 +239,8 @@ component fdc1771 is
 			sd_dout		   	: in std_logic_vector(7 downto 0);
 			sd_din		   	: out std_logic_vector(7 downto 0);
 			sd_dout_strobe 	: in std_logic;
+
+			drives_mapped	: out std_logic_vector(1 downto 0);
 
 			cmd_out		    : out  std_logic_vector(7 downto 0);	
 			track_out		: out  std_logic_vector(7 downto 0);	
@@ -349,6 +350,7 @@ signal fdc_wr_strobe : std_logic := '0';
 signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
+signal drives_mapped : std_logic_vector(1 downto 0);
 
 signal clk_25ms_latch : std_logic := '1';
 signal old_clk_25ms : std_logic := '0';
@@ -533,6 +535,8 @@ port map
 	sd_din => sd_buff_din,
 	sd_dout_strobe => sd_dout_strobe,
 
+	drives_mapped => drives_mapped,
+
 	-- Debugging for overscan
 	cmd_out => dbg_cmd,
 	track_out => dbg_track,
@@ -626,7 +630,7 @@ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
 		 fdc_dout when fdc_rd='0' else	
 		 -- Floppy select and irq signals	
-		 (not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
+		 (not clk_25ms_latch) & fdc_irq & "1111" & (not drives_mapped) when irq_latch_read='1' else
   		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
