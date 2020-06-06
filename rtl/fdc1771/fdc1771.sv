@@ -482,6 +482,11 @@ always @(posedge clkcpu) begin
 					// seek
 					if(cmd[7:4] == 4'b0001) begin
 						track_not_found <= 0;
+						if (step_to >= MAX_TRACK) begin
+							track_not_found <= 1'b1;
+							seek_state <= 4;
+							delay_cnt <= 16'd3*CLK_EN; // DelY
+						end 
 						if (track == step_to) seek_state <= 2;
 						else begin
 							step_dir <= (step_to < track);
@@ -536,12 +541,7 @@ always @(posedge clkcpu) begin
 
 				// finish
 				3: begin
-					if (track >= MAX_TRACK) begin
-						track_not_found <= 1'b1;
-						seek_state <= 4;
-						delay_cnt <= 16'd3*CLK_EN; // DelY
-					end 
-					else begin
+					 begin
 						busy <= 1'b0;
 						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
@@ -878,8 +878,8 @@ logic s6, s5, s4, s2, s1;
 always_comb
 begin
 	if(cmd_type_1 || cmd_type_4) begin
-		s6 = floppy_write_protected & fd_ready;
-		s5 = seeking ? track_not_found : fd_ready; 	// LDOS fix
+		s6 = floppy_write_protected;
+		s5 = seeking && track_not_found ? 1'b1 : 1'b0; 	// LDOS fix
 		s4 = seeking && track_not_found ? 1'b0 : RNF;
 		s2 = fd_track0;
 		s1 = ~fd_index;
@@ -888,19 +888,25 @@ begin
 			s6 = 1'b0;
 			s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
 		end else begin	// else sector write
-			s6 = floppy_write_protected & fd_ready;
+			s6 = floppy_write_protected;
 			s5 = 1'b0;
 		end
 		s4 = RNF;
 		s2 = data_lost;
 		s1 = drq;
 	end else begin //cmd_type_3 or unknown state
-		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected & fd_ready;	// write track
+		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
 		else s6 = 1'b0;
 		s5 = 1'b0;
 		s4 = 1'b0;
 		s2 = data_lost;
 		s1 = drq;
+	end
+	if(!floppy_present) begin		// Pullups if no disk attached
+		s6 = 1'b1;
+		s5 = 1'b1;
+		s2 = 1'b1;
+		s1 = 1'b1;
 	end
 end
 
@@ -908,7 +914,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = {!motor_on & fd_ready, 
+wire [7:0] status = {!motor_on & floppy_present, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
