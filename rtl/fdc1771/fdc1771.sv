@@ -904,7 +904,7 @@ begin
 	end
 	if(!floppy_present) begin		// Pullups if no disk attached
 		s6 = 1'b1;
-		s5 = 1'b1;
+		s5 = 1'b0;
 		s2 = 1'b1;
 		s1 = 1'b1;
 	end
