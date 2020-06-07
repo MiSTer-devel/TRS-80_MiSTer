@@ -101,8 +101,10 @@ reg [1:0] floppy_ready = 0;
 wire         floppy_present = (floppy_drive == 4'b1110)?floppy_ready[0]:
                               (floppy_drive == 4'b1101)?floppy_ready[1]:1'b0;
 
-wire floppy_write_protected = (floppy_drive == 4'b1110)?img_wp[0]:
-                              (floppy_drive == 4'b1101)?img_wp[1]:1'b1;
+// wire floppy_write_protected = (floppy_drive == 4'b1110)?img_wp[0]:
+//                               (floppy_drive == 4'b1101)?img_wp[1]:1'b1;
+
+wire floppy_write_protected = 1'b1 /* synthesis keep */;
 
 reg  [10:0] sector_len[2];
 reg   [4:0] spt[2];     // sectors/track
@@ -904,7 +906,7 @@ begin
 	end
 	if(!floppy_present) begin		// Pullups if no disk attached
 		s6 = 1'b1;
-		s5 = 1'b0;
+		s5 = 1'b1; //1'b0;
 		s2 = 1'b1;
 		s1 = 1'b1;
 	end

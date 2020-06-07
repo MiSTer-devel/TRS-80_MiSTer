@@ -11,6 +11,9 @@
      * Various disk formats (i.e. single/double density, etc.)
 
   * SE Tracker
+    * Fix issues with LDOS directory corruption - done
+    * Fix issue with CLOCK now working - done
+    * Fix issue with LDOS hanging when doing an unqualified DIR
     * Add write support
     * Consider fixing CPU speed during disk access
     * Add translation from JV3 to JV1 on the fly (core changes)

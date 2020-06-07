@@ -350,6 +350,7 @@ signal fdc_wr_strobe : std_logic := '0';
 signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
+signal old_latch_read : std_logic := '1';
 signal drives_mapped : std_logic_vector(1 downto 0);
 
 signal clk_25ms_latch : std_logic := '1';
@@ -421,7 +422,9 @@ begin
 			if(clk_25ms='1') then -- latch on rising edge
 				clk_25ms_latch <= '0';
 			end if;
-			if(irq_latch_read='1') then -- clear on read of 0x37e0
+
+			old_latch_read <= irq_latch_read;
+			if (old_latch_read='1' and irq_latch_read='0') then
 				clk_25ms_latch <= '1';
 			end if;
 		end if;
@@ -590,7 +593,7 @@ fdc_rd <= not fdc_sel or memr;
 fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
-irq_latch_read <= '1' when cpua(15 downto 2)="00110111111000" and memr='0' else '0';
+irq_latch_read <= '1' when cpua(15 downto 0)=x"37e0" and memr='0' else '0';
 expansion_irq <= clk_25ms_latch and not fdc_irq;
 
 process(clk42m, reset)
@@ -630,7 +633,7 @@ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
 		 kbdout when kbdsel='1' else	
 		 fdc_dout when fdc_rd='0' else	
 		 -- Floppy select and irq signals	
-		 (not clk_25ms_latch) & fdc_irq & "1111" & (not drives_mapped) when irq_latch_read='1' else
+		 (not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
   		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
