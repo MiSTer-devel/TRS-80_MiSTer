@@ -358,23 +358,11 @@ reg step_in, step_out;
 //wire motor_spin_up_done = (!motor_on) || (motor_on && (motor_spin_up_sequence == 0));
 
 // ---------------------------- step handling ------------------------------
+// Moved to Floppy.v
 
-localparam STEP_PULSE_LEN = 16'd1;
-localparam STEP_PULSE_CLKS = STEP_PULSE_LEN * CLK_EN;
-reg [15:0] step_pulse_cnt;
-
-// the step rate is only valid for command type I
-wire [15:0] step_rate_clk = 
-           (cmd[1:0]==2'b00)?(16'd6*CLK_EN-1'd1):    //  6ms
-           (cmd[1:0]==2'b01)?(16'd12*CLK_EN-1'd1):   // 12ms
-           (cmd[1:0]==2'b10)?(16'd2*CLK_EN-1'd1):    //  2ms
-           (16'd3*CLK_EN-1'd1);                      //  3ms
-
-reg [15:0] step_rate_cnt;
 reg [23:0] delay_cnt;
 
-// flag indicating that a "step" is in progress
-(* preserve *) wire step_busy = (step_rate_cnt != 0);
+// flag indicating that a delay is in progress
 (* preserve *) wire delaying = (delay_cnt != 0);
 wire seeking = (cmd[7:4] == 4'b0001);
 
@@ -425,17 +413,8 @@ always @(posedge clkcpu) begin
 		sd_card_write <= 0;
 		data_transfer_start <= 1'b0;
 
-		// disable step signal after 1 msec
-		if(step_pulse_cnt != 0) 
-			step_pulse_cnt <= step_pulse_cnt - 16'd1;
-		else begin
-			step_in <= 1'b0;
-			step_out <= 1'b0;
-		end
-
-		 // step rate timer
-		if(step_rate_cnt != 0) 
-			step_rate_cnt <= step_rate_cnt - 16'd1;
+		step_in <= 1'b0;
+		step_out <= 1'b0;
 
 		// delay timer
 		if(delay_cnt != 0) 
@@ -464,7 +443,7 @@ always @(posedge clkcpu) begin
 
 		// execute command if motor is not supposed to be running or
 		// wait for motor spinup to finish
-		if(busy && !step_busy && !delaying) begin
+		if(busy && fdc_ready && !delaying) begin
 
 			// ------------------------ TYPE I -------------------------
 			if(cmd_type_1) begin
@@ -526,9 +505,6 @@ always @(posedge clkcpu) begin
 							track_dec_strobe <= 1'b1;
 						else
 							track_inc_strobe <= 1'b1;
-
-					step_pulse_cnt <= STEP_PULSE_CLKS - 1'd1;
-					step_rate_cnt <= step_rate_clk;
 
 					seek_state <= (!cmd[6] && !cmd[5]) ? 0 : 2; // loop for seek/restore
 				   end

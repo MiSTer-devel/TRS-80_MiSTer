@@ -32,14 +32,14 @@ module floppy (
 	input  [9:0] sector_gap_len, // gap len/sector
 	input  [1:0] density,		// 0 - SD, 1 - DD, 2 - HD
 
-	output 	     dclk_en,      // data clock enable
-	output [6:0] track,        // number of track under head
-	output [4:0] sector,       // number of sector under head, 0 = no sector
-	output 	     sector_hdr,   // valid sector header under head
-	output 	     sector_data,  // valid sector data under head
-	       
-	output 	     ready,        // drive is ready, data can be read
-	output reg   index
+	output 	     dclk_en,      // data clock enable - gates transfer to CPU
+	output [6:0] track,        // number of track under head - nn
+	output [4:0] sector,       // number of sector under head, 0 = no sector - nn
+	output 	     sector_hdr,   // valid sector header under head - nn
+	output 	     sector_data,  // valid sector data under head - nn
+	
+	output 	     ready,        // drive is ready, data can be read - nn - could be 1
+	output reg   index			// Used only in status register to report the index hole
 );
 
 // The sysclock is the value all floppy timings are derived from. 
@@ -54,9 +54,9 @@ localparam RATESD = 20'd125000;
 localparam RATEDD = 20'd250000;
 localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
-localparam STEPBUSY = 8'd3;       // 18ms after step data can be read
-localparam SPINUP = 10'd50;       // drive spins up in up to 800ms
-localparam SPINDOWN = 12'd3000;     // GUESSED: drive spins down in 300ms
+localparam STEPBUSY = 8'd18;       // 18ms after step data can be read
+localparam SPINUP = 10'd800;       // drive spins up in up to 800ms
+localparam SPINDOWN = 12'd300;     // GUESSED: drive spins down in 300ms
 localparam INDEX_PULSE_LEN = 4'd2; // fd1036 data sheet says 1~8ms
 localparam SECTOR_HDR_LEN = 4'd5;  // GUESSED: Sector header is 6 bytes
 localparam TRACKS = 8'd85;         // max allowed track
@@ -142,12 +142,13 @@ localparam SECTOR_STATE_HDR  = 2'd1;
 localparam SECTOR_STATE_DATA = 2'd2;
 
 // we simulate an interleave of 1
-reg [4:0] start_sector = 4'd1;
+reg [4:0] start_sector = 4'd0;
 
 reg [1:0] sec_state;
 reg [10:0] sec_byte_cnt;  // counting bytes within sectors
-reg [4:0] current_sector = 4'd1;
+reg [4:0] current_sector = 4'd0;
   
+  // State machine selecting sec_state and sec_byte_len
 always @(posedge clk) begin
 	if (byte_clk_en) begin
 		if(index_pulse_start) begin
@@ -192,6 +193,8 @@ end
 
 // An ed floppy at 300rpm with 1MBit/s has max 31.250 bytes/track
 // thus we need to support up to 31250 events
+// Drives byte_cnt for above sector state, and index_pulse_start
+// Clocked on byte_clk_en (see below)
 reg [14:0] byte_cnt;
 reg 	   index_pulse_start;
 always @(posedge clk) begin
