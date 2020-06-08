@@ -62,7 +62,7 @@ module fdc1771 (
 	output     [7:0] sd_din,
 	input            sd_dout_strobe,
 
-	output	   [1:0] drives_mapped,
+	output	         fdc_new_command,
 	// debugging
 	output     [7:0] cmd_out,
 	output     [7:0] track_out,
@@ -391,10 +391,11 @@ wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
 wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
 reg set_irq_clr;
 reg notready_wait;
+reg [2:0] seek_state /* synthesis keep */;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
-	reg [1:0] seek_state;
+	
 	
 	reg irq_at_index;
 
@@ -879,36 +880,49 @@ end
 logic s6, s5, s4, s2, s1;
 always_comb
 begin
-	if(cmd_type_1 || cmd_type_4) begin
-		s6 = floppy_write_protected;
-		s5 = seeking && track_not_found ? 1'b1 : 1'b0; 	// LDOS fix
-		s4 = seeking && track_not_found ? 1'b0 : RNF;
-		s2 = fd_track0;
-		s1 = ~fd_index;
-	end else if(cmd_type_2) begin
-		if(sector_read) begin
-			s6 = 1'b0;
-			s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
-		end else begin	// else sector write
-			s6 = floppy_write_protected;
-			s5 = 1'b0;
-		end
-		s4 = RNF;
-		s2 = data_lost;
-		s1 = drq;
-	end else begin //cmd_type_3 or unknown state
-		if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
-		else s6 = 1'b0;
-		s5 = 1'b0;
+	if(!floppy_present) begin		// Pull-ups if no disk attached
+		s6 = 1'b0;
+		s5 = 1'b1;
 		s4 = 1'b0;
-		s2 = data_lost;
-		s1 = drq;
-	end
-	if(!floppy_present) begin		// Pullups if no disk attached
-		s6 = 1'b1;
-		s5 = 1'b1; //1'b0;
 		s2 = 1'b1;
 		s1 = 1'b1;
+	end
+	else begin
+		if(cmd_type_1) begin 
+			s6 = floppy_write_protected;
+			s5 = seeking && track_not_found ? 1'b1 : 1'b0; 	// LDOS fix
+			s4 = seeking && track_not_found ? 1'b0 : RNF;
+			s2 = fd_track0;
+			s1 = ~fd_index;
+		end 
+		else if(cmd_type_2) begin
+			if(sector_read) begin
+				s6 = 1'b0;
+				s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
+			end 
+			else begin	// else sector write
+				s6 = floppy_write_protected;
+				s5 = 1'b0;
+			end
+			s4 = RNF;
+			s2 = data_lost;
+			s1 = drq;
+		end 
+		else if(cmd_type_3) begin //cmd_type_3 or unknown state
+			if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
+			else s6 = 1'b0;
+			s5 = 1'b0;
+			s4 = 1'b0;
+			s2 = data_lost;
+			s1 = drq;
+		end
+		else begin //cmd_type_4 or unknown state
+			s6 = floppy_write_protected;
+			s5 = 1'b0;
+			s4 = 1'b0;
+			s2 = fd_track0;
+			s1 = ~fd_index;
+		end
 	end
 end
 
@@ -940,6 +954,7 @@ wire cmd_type_1 = (cmd[7] == 1'b0);
 wire cmd_type_2 = (cmd[7:6] == 2'b10);
 wire cmd_type_3 = (cmd[7:5] == 3'b111) || (cmd[7:4] == 4'b1100);
 wire cmd_type_4 = (cmd[7:4] == 4'b1101);
+assign fdc_new_command = cmd_rx_i;
 
 // output debugging info
 assign cmd_out = cmd;

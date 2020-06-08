@@ -240,7 +240,7 @@ component fdc1771 is
 			sd_din		   	: out std_logic_vector(7 downto 0);
 			sd_dout_strobe 	: in std_logic;
 
-			drives_mapped	: out std_logic_vector(1 downto 0);
+			fdc_new_command : out std_logic;
 
 			cmd_out		    : out  std_logic_vector(7 downto 0);	
 			track_out		: out  std_logic_vector(7 downto 0);	
@@ -265,7 +265,7 @@ signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
 signal cpuclk,cpuclk_r : std_logic;
-signal clk_8mhz : std_logic;
+signal fdc_clk : std_logic;
 signal clk_25ms : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
@@ -288,7 +288,7 @@ signal dbg_status : std_logic_vector(7 downto 0);
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
-signal clk_8mhz_div : std_logic_vector(5 downto 0) := "000100";
+signal fdc_clk_div : std_logic_vector(5 downto 0) := "000100";
 signal clk_25ms_div : integer := 1064450;
 signal tick_1s : std_logic := '0';
 signal tick_counter : integer := 40;
@@ -347,11 +347,11 @@ signal fdc_drive : std_logic_vector(1 downto 0);
 signal fdc_strobe : std_logic := '0';
 signal fdc_rd_strobe : std_logic := '0';
 signal fdc_wr_strobe : std_logic := '0';
+signal fdc_new_command : std_logic;
 signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
 signal old_latch_read : std_logic := '1';
-signal drives_mapped : std_logic_vector(1 downto 0);
 
 signal clk_25ms_latch : std_logic := '1';
 signal old_clk_25ms : std_logic := '0';
@@ -383,14 +383,14 @@ led <= taperead;
 process(clk42m)
 begin
 	if rising_edge(clk42m) then
-		clk_8mhz <= '0';
+		fdc_clk <= '0';
 
 		-- CPU clock divider
-		if clk_8mhz_div = "000000" then	-- count down rather than up, as overclock may change
-			clk_8mhz <= '1';
-			clk_8mhz_div <= "000100";   -- speed =  8.4 Mhz (42MHz / 5)
+		if fdc_clk_div = "000000" then	-- count down rather than up, as overclock may change
+			fdc_clk <= '1';
+			fdc_clk_div <= "000001";   -- speed =  21 Mhz (42MHz / 20)
 		else
-			clk_8mhz_div <= clk_8mhz_div - 1;
+			fdc_clk_div <= fdc_clk_div - 1;
 		end if;
 	end if;
 end process;
@@ -472,7 +472,7 @@ begin
 					if(fdc_motor_countdown=0) then
 						fdc_motor_state <= running;
 						-- Countdown in 25ms ticks - 3 seconds to idle
-						fdc_motor_countdown <= 40 * 3;
+						fdc_motor_countdown <=  40 * 3;
 						fdc_motor_on <= '1';
 					else 
 						if clk_25ms='1' then
@@ -484,7 +484,8 @@ begin
 						fdc_motor_state <= stopped;	-- idle timeout
 						fdc_motor_on <= '0';
 					else
-						if(floppy_select_write='1') then
+						-- Reset on floppy select or new command received by fdv
+						if(floppy_select_write='1' or fdc_new_command='1') then
 							fdc_motor_countdown <= 40 * 3; -- reset countdown on select
 						else
 							if clk_25ms='1' then
@@ -500,14 +501,14 @@ end process;
 fdc : fdc1771
 generic map (
 	CLK => 42578000,		-- sys_clk speed
-	CLK_EN => 8400,			-- 8400 Khz
+	CLK_EN => 21289,			-- 21064.45 Khz
 	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
 	SECTOR_BASE => 0
 )
 port map
 (
 	clkcpu	=> clk42m,
-	clk8m_en => clk_8mhz,
+	clk8m_en => fdc_clk,
 
 	floppy_drive => floppy_select,			-- ** Link up to drive select code
 	floppy_side => '1',				-- Only single sided for now
@@ -538,7 +539,7 @@ port map
 	sd_din => sd_buff_din,
 	sd_dout_strobe => sd_dout_strobe,
 
-	drives_mapped => drives_mapped,
+	fdc_new_command => fdc_new_command,
 
 	-- Debugging for overscan
 	cmd_out => dbg_cmd,
@@ -566,7 +567,7 @@ begin
 					when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
 					when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
 					when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
-					when "11" => clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)
+					when "11" => clk1774_div <= "000001";  --  12x speed = 21.29 (42MHz /  2)
 				end case;
 			end if;
 		else

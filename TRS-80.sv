@@ -148,7 +148,7 @@ localparam CONF_STR = {
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
-	"O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),21.36(12x);",
+	"O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),21.29(12x);",
 	"-;",
 	"R0,Reset;",
 	"J,Fire;",
