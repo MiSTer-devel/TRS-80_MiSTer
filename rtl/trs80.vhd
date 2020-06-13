@@ -203,14 +203,14 @@ end component ;
 
 component fdc1771 is
 		generic (
-			CLK : integer;		-- Main system clock
-			CLK_EN : integer;	-- Clock in kHz
+			SYS_CLK : integer;		-- Main system clock
 			SECTOR_SIZE_CODE : std_logic_vector(1 downto 0);
 			SECTOR_BASE : integer
 		);
 		port (
-			clkcpu  		: in std_logic;
-			clk8m_en  		: in std_logic;
+			clk_sys  		: in std_logic;
+			clk_cpu  		: in std_logic;
+			clk_div	    	: in integer;
 
 			floppy_drive    : in std_logic_vector(3 downto 0);
 			floppy_side		: in std_logic;
@@ -265,7 +265,6 @@ signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
 signal cpuclk,cpuclk_r : std_logic;
-signal fdc_clk : std_logic;
 signal clk_25ms : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
@@ -288,7 +287,6 @@ signal dbg_status : std_logic_vector(7 downto 0);
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
-signal fdc_clk_div : std_logic_vector(5 downto 0) := "000100";
 signal clk_25ms_div : integer := 1064450;
 signal tick_1s : std_logic := '0';
 signal tick_counter : integer := 40;
@@ -352,6 +350,7 @@ signal floppy_select : std_logic_vector(3 downto 0);
 signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
 signal old_latch_read : std_logic := '1';
+signal fdc_clk_div : integer;
 
 signal clk_25ms_latch : std_logic := '1';
 signal old_clk_25ms : std_logic := '0';
@@ -361,6 +360,10 @@ type motor_state is (stopped, spinup, running);
 signal fdc_motor_state : motor_state;
 signal fdc_motor_on : std_logic := '0';
 signal fdc_motor_countdown : integer := 0;
+-- debugging counter
+signal counter : std_logic_vector(31 downto 0) := (others => '0');  -- Used for debugging via SignalTap
+attribute noprune: boolean; 
+attribute noprune of counter: signal is true; -- set to false for RTL
 
 begin
 
@@ -378,23 +381,6 @@ port map
 );
 
 led <= taperead;
-
--- Generate 8(ish) Mhz clock for Disk Interface
-process(clk42m)
-begin
-	if rising_edge(clk42m) then
-		fdc_clk <= '0';
-
-		-- CPU clock divider
-		if fdc_clk_div = "000000" then	-- count down rather than up, as overclock may change
-			fdc_clk <= '1';
-			fdc_clk_div <= "000001";   -- speed =  21 Mhz (42MHz / 20)
-		else
-			fdc_clk_div <= fdc_clk_div - 1;
-		end if;
-	end if;
-end process;
-
 
 -- Generate 25ms clock for RTC in expansion interface
 process(clk42m)
@@ -466,13 +452,13 @@ begin
 					if(floppy_select_write='1') then
 						fdc_motor_state <= spinup;
 						-- Countdown in 25ms ticks - 0.5 seconds to start
-						fdc_motor_countdown <= 20;
+						fdc_motor_countdown <= 20 / fdc_clk_div;
 					end if;
 				when spinup =>	-- Motor spinning up
 					if(fdc_motor_countdown=0) then
 						fdc_motor_state <= running;
 						-- Countdown in 25ms ticks - 3 seconds to idle
-						fdc_motor_countdown <=  40 * 3;
+						fdc_motor_countdown <=  (40 * 3) / fdc_clk_div;
 						fdc_motor_on <= '1';
 					else 
 						if clk_25ms='1' then
@@ -486,7 +472,7 @@ begin
 					else
 						-- Reset on floppy select or new command received by fdv
 						if(floppy_select_write='1' or fdc_new_command='1') then
-							fdc_motor_countdown <= 40 * 3; -- reset countdown on select
+							fdc_motor_countdown <= (40 * 3) / fdc_clk_div; -- reset countdown on select
 						else
 							if clk_25ms='1' then
 								fdc_motor_countdown <= fdc_motor_countdown - 1;
@@ -500,15 +486,15 @@ end process;
 
 fdc : fdc1771
 generic map (
-	CLK => 42578000,		-- sys_clk speed
-	CLK_EN => 21289,			-- 21064.45 Khz
+	SYS_CLK => 42578000,		-- sys_clk speed
 	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
 	SECTOR_BASE => 0
 )
 port map
 (
-	clkcpu	=> clk42m,
-	clk8m_en => fdc_clk,
+	clk_sys	=> clk42m,
+	clk_cpu => cpuClk,
+	clk_div => fdc_clk_div,
 
 	floppy_drive => floppy_select,			-- ** Link up to drive select code
 	floppy_side => '1',				-- Only single sided for now
@@ -555,6 +541,7 @@ process(clk42m)
 begin
 	if rising_edge(clk42m) then
 		cpuClk <= '0';
+		counter <= counter + 1;  -- debugging counter
 
 		-- CPU clock divider
 		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
@@ -565,9 +552,15 @@ begin
 			else
 				case overclock(1 downto 0) is
 					when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
-					when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
-					when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
+					when "01" => clk1774_div <= "001011";  -- 	2x speed =  3.58 (42MHz / 12)
+					when "10" => clk1774_div <= "000111";  --   3x speed =  5.34 (42MHz /  8)
 					when "11" => clk1774_div <= "000001";  --  12x speed = 21.29 (42MHz /  2)
+				end case;
+				case overclock(1 downto 0) is
+					when "00" => fdc_clk_div <= 1;  --   1x speed =  1.78 (42MHz / 24)
+					when "01" => fdc_clk_div <= 2;  --   2x speed =  3.58 (42MHz / 12)
+					when "10" => fdc_clk_div <= 3;  --   3x speed =  5.34 (42MHz /  8)
+					when "11" => fdc_clk_div <= 12;  --  12x speed = 21.29 (42MHz /  2)
 				end case;
 			end if;
 		else

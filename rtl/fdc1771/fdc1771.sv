@@ -29,8 +29,9 @@
 //	Single	80		200k
 
 module fdc1771 (
-	input            clkcpu, // system cpu clock.
-	input            clk8m_en,
+	input            clk_sys, // system cpu clock.
+	input            clk_cpu,
+	input	[7:0]	 clk_div,
 
 	// external set signals
 	input      [3:0] floppy_drive,
@@ -72,14 +73,13 @@ module fdc1771 (
 
 );
 
-parameter CLK = 32000000;
-parameter CLK_EN = 16'd8000; // in kHz
+parameter SYS_CLK = 42578000;
 parameter SECTOR_SIZE_CODE = 2'd1; // sec size 0=128, 1=256, 2=512, 3=1024
 parameter SECTOR_BASE = 1'b0; // number of first sector on track (archie 0, dos 1)
 
 localparam SECTOR_SIZE = 11'd128 << SECTOR_SIZE_CODE;
 localparam MAX_TRACK = 8'd250;	// A seek for a track above this will throw RNF
-
+wire [31:0] CLK_EN = (SYS_CLK / 1000)/clk_div;	// Clock in Khz adjusted for CPU speed
 // -------------------------------------------------------------------------
 // --------------------- IO controller image handling ----------------------
 // -------------------------------------------------------------------------
@@ -156,7 +156,7 @@ always @(*) begin
 	end
 end
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	reg [1:0] img_mountedD;
 
 	img_mountedD <= img_mounted;
@@ -182,14 +182,14 @@ end
 // ---------------------------- IRQ/DRQ handling ---------------------------
 // -------------------------------------------------------------------------
 reg cpu_selD;
-always @(posedge clkcpu) cpu_selD <= cpu_sel;
+always @(posedge clk_sys) cpu_selD <= cpu_sel;
 wire cpu_we = ~cpu_selD & cpu_sel & ~cpu_wr;
 
 reg irq_set;
 
 // floppy_reset and read of status register/write of command register clears irq
 reg cpu_rw_cmdstatus;
-always @(posedge clkcpu)
+always @(posedge clk_sys)
   cpu_rw_cmdstatus <= ~cpu_selD && cpu_sel && cpu_addr == FDC_REG_CMDSTATUS;
 
 wire irq_clr = !floppy_reset || cpu_rw_cmdstatus || set_irq_clr;
@@ -198,7 +198,7 @@ reg old_irq_set=1'b0;
 reg old_irq_clr=1'b0;
 
 // Changed to only trigger on rising edge
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	old_irq_clr <= irq_clr;
 	old_irq_set <= irq_set;
 	if(~old_irq_clr & irq_clr) irq <= 1'b0;
@@ -208,12 +208,12 @@ end
 reg drq_set;
 
 reg cpu_rw_data;
-always @(posedge clkcpu)
+always @(posedge clk_sys)
 	cpu_rw_data <= ~cpu_selD && cpu_sel && cpu_addr == FDC_REG_DATA;
 
 wire drq_clr = !floppy_reset || cpu_rw_data;
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	if(drq_clr) drq <= 1'b0;
 	else if(drq_set) drq <= 1'b1;
 end
@@ -233,14 +233,16 @@ wire fd0_sector_hdr;
 wire fd0_sector_data;
 wire fd0_dclk;
 
-floppy #(.SYS_CLK(CLK)) floppy0 (
-	.clk         ( clkcpu          ),
+floppy #(.SYS_CLK(SYS_CLK)) floppy0 (
+	.clk         ( clk_sys          ),
 
 	// control signals into floppy
 	.select      (!floppy_drive[0] ),
 	.motor_on    ( motor_on        ),
 	.step_in     ( step_in         ),
 	.step_out    ( step_out        ),
+	.step_delay_ms ( step_delay_ms ),
+	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
 	.sector_len  ( sector_len[0]   ),
@@ -270,14 +272,16 @@ wire fd1_sector_hdr;
 wire fd1_sector_data;
 wire fd1_dclk;
 
-floppy #(.SYS_CLK(CLK)) floppy1 (
-	.clk         ( clkcpu          ),
+floppy #(.SYS_CLK(SYS_CLK)) floppy1 (
+	.clk         ( clk_sys          ),
 
 	// control signals into floppy
 	.select      (!floppy_drive[1] ),
 	.motor_on    ( motor_on        ),
 	.step_in     ( step_in         ),
 	.step_out    ( step_out        ),
+	.step_delay_ms ( step_delay_ms ),
+	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
 	.sector_len  ( sector_len[1]   ),
@@ -359,8 +363,14 @@ reg step_in, step_out;
 
 // ---------------------------- step handling ------------------------------
 // Moved to Floppy.v
+// the step rate is only valid for command type I
+wire [15:0] step_delay_ms = 
+           (cmd[1:0]==2'b00) ? 16'd12:   // 12ms
+           (cmd[1:0]==2'b01) ? 16'd12:   // 12ms
+           (cmd[1:0]==2'b10) ? 16'd20:   // 20ms
+           16'd40;                      //  40ms
 
-reg [23:0] delay_cnt;
+reg [31:0] delay_cnt;
 
 // flag indicating that a delay is in progress
 (* preserve *) wire delaying = (delay_cnt != 0);
@@ -381,7 +391,7 @@ reg set_irq_clr;
 reg notready_wait;
 reg [2:0] seek_state /* synthesis keep */;
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	reg data_transfer_can_start;
 	
 	
@@ -408,7 +418,7 @@ always @(posedge clkcpu) begin
 		sector_not_found <= 1'b0;
 		track_not_found <= 1'b0;
 		irq_at_index <= 1'b0;
-	end else if (clk8m_en) begin
+	end else if (clk_cpu) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
 		data_transfer_start <= 1'b0;
@@ -443,7 +453,7 @@ always @(posedge clkcpu) begin
 
 		// execute command if motor is not supposed to be running or
 		// wait for motor spinup to finish
-		if(busy && fdc_ready && !delaying) begin
+		if(busy && fd_ready && !delaying) begin
 
 			// ------------------------ TYPE I -------------------------
 			if(cmd_type_1) begin
@@ -625,14 +635,14 @@ always @(posedge clkcpu) begin
 						busy <= 1'b0;
 						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
-					end
+					end else
 
-					// write track TODO: fake
+					// write track TODO: fake - also catches 0xFE command NEWDOS80
 					if(cmd[7:4] == 4'b1111) begin
 						busy <= 1'b0;
 						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
-					end
+					end else
 
 					// read address
 					if(cmd[7:4] == 4'b1100) begin
@@ -696,13 +706,13 @@ wire writing_mem = cmd[7:5] == 3'b101 && data_in_strobe ? 1'b1 : 1'b0;
 // so force ADDR width to 10, even though only reading first 256 bytes 
 dpram #(.ADDR(9), .DATA(8)) fifo
 (
-	.a_clk(clkcpu),
+	.a_clk(clk_sys),
 	.a_wr(sd_dout_strobe & sd_ack),
 	.a_addr(fifo_sdptr),
 	.a_din(sd_dout),
 	.a_dout(sd_din),
 
-	.b_clk(clkcpu),
+	.b_clk(clk_sys),
 	.b_wr(writing_mem),
 	.b_addr({sector[0], fifo_cpuptr[7:0]}),
 	.b_din(data_in),
@@ -710,7 +720,7 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 );
 // dpram #(SECTOR_SIZE_CODE + 7) fifo
 // (
-// 	.clock(clkcpu),
+// 	.clock(clk_sys),
 
 // 	.address_a(fifo_sdptr),
 // 	.data_a(sd_dout),
@@ -733,7 +743,7 @@ reg       sd_card_write;
 reg       sd_card_read;
 reg       sd_card_done;
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	reg sd_ackD;
 	reg sd_card_readD;
 	reg sd_card_writeD;
@@ -742,7 +752,7 @@ always @(posedge clkcpu) begin
 	sd_card_writeD <= sd_card_write;
 	sd_ackD <= sd_ack;
 	if (sd_ack) {sd_rd, sd_wr} <= 0;
-	if (clk8m_en) sd_card_done <= 0;
+	if (clk_cpu) sd_card_done <= 0;
 
 	case (sd_state)
 	SD_IDLE:
@@ -787,7 +797,7 @@ end
 // -------------------- CPU data read/write -----------------------
 reg [10:0] data_transfer_cnt /* synthesis keep */;
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	reg        data_transfer_startD;
 	
 
@@ -799,7 +809,7 @@ always @(posedge clkcpu) begin
 	end
 
 	drq_set <= 1'b0;
-	if (clk8m_en) data_transfer_done <= 0;
+	if (clk_cpu) data_transfer_done <= 0;
 	data_transfer_startD <= data_transfer_start;
 	// received request to read data
 	if(~data_transfer_startD & data_transfer_start) begin
@@ -963,7 +973,7 @@ reg cmd_rx /* verilator public */;
 reg cmd_rx_i;
 reg data_in_strobe;
 
-always @(posedge clkcpu) begin
+always @(posedge clk_sys) begin
 	if(!floppy_reset) begin
 		// clear internal registers
 		cmd <= 8'h00;
@@ -982,7 +992,7 @@ always @(posedge clkcpu) begin
 		cmd_rx <= cmd_rx_i;
 
 		// command reception is ack'd by fdc going busy
-		if((!cmd_type_4 && busy) || (clk8m_en && cmd_type_4 && !busy)) cmd_rx_i <= 1'b0;
+		if((!cmd_type_4 && busy) || (clk_cpu && cmd_type_4 && !busy)) cmd_rx_i <= 1'b0;
 
 		// only react if stb just raised
 		if(cpu_we) begin

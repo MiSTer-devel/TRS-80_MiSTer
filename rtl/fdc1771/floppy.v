@@ -25,6 +25,8 @@ module floppy (
 	input 	     motor_on,
 	input 	     step_in,
 	input 	     step_out,
+	input 		 step_delay_ms,
+	input  [7:0] clk_div,
 
 	input  [10:0] sector_len,
 	input        sector_base,    // number of first sector on track (archie 0, dos 1)
@@ -44,7 +46,7 @@ module floppy (
 
 // The sysclock is the value all floppy timings are derived from. 
 // Default: 8 MHz
-parameter SYS_CLK = 8400000;
+parameter SYS_CLK = 42578000;
 
 assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
 assign sector_data = (sec_state == SECTOR_STATE_DATA);
@@ -55,10 +57,10 @@ localparam RATEDD = 20'd250000;
 localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
 localparam STEPBUSY = 8'd18;       // 18ms after step data can be read
-localparam SPINUP = 10'd800;       // drive spins up in up to 800ms
-localparam SPINDOWN = 12'd300;     // GUESSED: drive spins down in 300ms
-localparam INDEX_PULSE_LEN = 4'd2; // fd1036 data sheet says 1~8ms
-localparam SECTOR_HDR_LEN = 4'd5;  // GUESSED: Sector header is 6 bytes
+localparam SPINUP = 10'd250;       // drive spins up in up to 800ms
+localparam SPINDOWN = 12'd250;     // GUESSED: drive spins down in 300ms
+localparam INDEX_PULSE_LEN = 5'd20; // fd1036 data sheet says 1~8ms - 6ms
+localparam SECTOR_HDR_LEN = 4'd6;  // GUESSED: Sector header is 6 bytes
 localparam TRACKS = 8'd85;         // max allowed track
 
 // TRS-80 specific values
@@ -81,7 +83,8 @@ assign ready = select && (rate == (density==2'b00 ? RATESD : density==2'b01 ? RA
 
 // Index pulse generation. Pulse starts with the begin of index_pulse_start
 // and lasts INDEX_PULSE_CYCLES system clock cycles
-localparam INDEX_PULSE_CYCLES = INDEX_PULSE_LEN * SYS_CLK / 1000;
+wire [31:0] INDEX_PULSE_CYCLES;
+assign INDEX_PULSE_CYCLES = (INDEX_PULSE_LEN * SYS_CLK / 1000) / clk_div;
 reg [18:0] index_pulse_cnt;
 always @(posedge clk) begin
 	if(index_pulse_start && (index_pulse_cnt == INDEX_PULSE_CYCLES-1)) begin
@@ -97,7 +100,7 @@ end
 // ======================= track handling =========================
 // ================================================================
 
-localparam STEP_BUSY_CLKS = (SYS_CLK/1000)*STEPBUSY;  // steprate is in ms
+wire [31:0] STEP_BUSY_CLKS = ((SYS_CLK/1000)*step_delay_ms)/clk_div;  // steprate is in ms
 
 assign track = current_track;
 reg [6:0] current_track /* verilator public */ = 7'd0;
@@ -228,8 +231,8 @@ end
 
 // number of system clock cycles after which disk has reached
 // full speed
-localparam SPIN_UP_CLKS = SYS_CLK/1000*SPINUP;
-localparam SPIN_DOWN_CLKS = SYS_CLK/1000*SPINDOWN;
+wire [31:0] SPIN_UP_CLKS = (SYS_CLK / 1000 * SPINUP)/clk_div;
+wire [31:0] SPIN_DOWN_CLKS = (SYS_CLK / 1000 * SPINDOWN)/clk_div;
 reg [31:0] spin_up_counter;
 
 // internal motor on signal that is only true if the drive is selected
@@ -269,13 +272,13 @@ end
 // Generate a data clock from the system clock. This depends on motor
 // speed and reaches the full rate when the disk rotates at 300RPM. No
 // valid data can be read until the disk has reached it's full speed.
-reg data_clk;
-reg data_clk_en;
+(* preserve *) reg data_clk;
+(* preserve *) reg data_clk_en;
 reg [31:0] clk_cnt;
 always @(posedge clk) begin
 	data_clk_en <= 0;
-	if(clk_cnt + rate > SYS_CLK/2) begin
-		clk_cnt <= clk_cnt - (SYS_CLK/2 - rate);
+	if(clk_cnt + rate > (SYS_CLK)/2) begin
+		clk_cnt <= clk_cnt - ((SYS_CLK)/2 - rate);
 		data_clk <= !data_clk;
 		if (~data_clk) data_clk_en <= 1;
 	end else
