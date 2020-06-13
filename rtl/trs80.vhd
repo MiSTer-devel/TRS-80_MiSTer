@@ -351,6 +351,7 @@ signal floppy_select_write : std_logic;
 signal irq_latch_read : std_logic;
 signal old_latch_read : std_logic := '1';
 signal fdc_clk_div : integer;
+signal fdc_slow_latch : std_logic := '0';
 
 signal clk_25ms_latch : std_logic := '1';
 signal old_clk_25ms : std_logic := '0';
@@ -548,7 +549,11 @@ begin
 			cpuClk     <= '1';
 			
 			if taperead = '1' then
-				clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)  --> override during tape read
+				clk1774_div <= "000001"; 	--  12x speed = 21.36 (42MHz /  2)  --> override during tape read
+				fdc_clk_div <= 12;  		
+			elsif fdc_slow_latch = '1' then
+				clk1774_div <= "010111"; 	--  1x speed = 21.36 (42MHz /  2)  
+				fdc_clk_div <= 1;  			-- override during read if override enabled (port 254)
 			else
 				case overclock(1 downto 0) is
 					when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
@@ -589,6 +594,20 @@ fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
 irq_latch_read <= '1' when cpua(15 downto 0)=x"37e0" and memr='0' else '0';
 expansion_irq <= clk_25ms_latch and not fdc_irq;
+
+-- Holmes Sprinter FDC override speed
+process(clk42m, reset)
+begin
+	if reset='1' then
+		fdc_slow_latch <= '0';
+	else
+		if rising_edge(clk42m) then
+			if iow='0' and cpua(7 downto 0)=x"fe" then
+				fdc_slow_latch <= not cpudo(0);
+			end if;
+		end if;
+	end if;
+end process;
 
 process(clk42m, reset)
 begin
