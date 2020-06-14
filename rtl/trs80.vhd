@@ -329,7 +329,9 @@ signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, I
 signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
 
 -- Disk controller signals
-signal fdc_irq : std_logic;
+signal fdc_irq : std_logic := '1';
+signal old_fdc_irq : std_logic := '1';
+signal fdc_irq_latch : std_logic := '1';
 signal fdc_drq : std_logic;
 signal fdc_wp : std_logic_vector(1 downto 0); -- = "00";
 signal fdc_addr : std_logic_vector(1 downto 0);
@@ -397,20 +399,28 @@ begin
 	end if;
 end process;
 
--- RTC irq latch circuit
+
+-- RTC and FDC irq latch circuit
 process(clk42m, reset)
 begin
 	if reset='1' then
 		clk_25ms_latch <= '1';
+		fdc_irq_latch <= '1';
 	else
 		if rising_edge(clk42m) then
 			if(clk_25ms='1') then -- latch on rising edge
 				clk_25ms_latch <= '0';
 			end if;
 
+			old_fdc_irq <= fdc_irq;
+			if (old_fdc_irq='1' and fdc_irq='0') then
+				fdc_irq_latch <= '0';
+			end if;	
+
 			old_latch_read <= irq_latch_read;
 			if (old_latch_read='1' and irq_latch_read='0') then
 				clk_25ms_latch <= '1';
+				fdc_irq_latch <= '1';
 			end if;
 		end if;
 	end if;
@@ -589,7 +599,7 @@ fdc_wr <= not fdc_sel or memw;
 fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
 irq_latch_read <= '1' when cpua(15 downto 0)=x"37e0" and memr='0' else '0';
-expansion_irq <= clk_25ms_latch and not fdc_irq;
+expansion_irq <= clk_25ms_latch and fdc_irq_latch;
 
 -- Holmes Sprinter FDC override speed
 process(clk42m, reset)
