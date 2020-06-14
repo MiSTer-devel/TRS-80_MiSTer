@@ -135,7 +135,7 @@ reg   [9:0] gap_len[2]; // gap len/sector
 reg   [1:0] doubleside;
 reg   [3:0] hd;
 
-wire [11:0] image_sectors = {img_size[19:9], 1'b0} /* synthesis keep */; // SE - Adjusted for 256 byte sectors
+wire [11:0] image_sectors = controller_type ? {img_size[19:7] << 1 , 1'b0} : img_size[19:8] /* synthesis keep */; // SE - Adjusted for 256 byte sectors
 reg  [11:0] image_sps; // sectors/side
 reg   [4:0] image_spt; // sectors/track
 reg   [9:0] image_gap_len;
