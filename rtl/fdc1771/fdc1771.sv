@@ -83,6 +83,7 @@ wire [31:0] CLK_EN = (SYS_CLK / 1000)/clk_div;	// Clock in Khz adjusted for CPU 
 // --------------------- IO controller image handling ----------------------
 // -------------------------------------------------------------------------
 
+// Percom and TRS-80 DD handler
 logic controller_type; // 0=1771(SD), 1=1791(DD)
 logic old_trsdd_enable;
 always @(posedge clk_sys) begin
@@ -98,14 +99,23 @@ always @(posedge clk_sys) begin
 	end
 end
 
+// Sector size handler
 logic [1:0] sector_size_code = 2'd1; // sec size 0=128, 1=256, 2=512, 3=1024
 always @(*) begin
 	if(controller_type==0) sector_size_code = 2'b01; // 256 bytes
 	else sector_size_code = 2'b10;	// 512 bytes
 end
-
 logic [10:0] sector_size;
 assign sector_size = 11'd128 << sector_size_code;
+
+// Detect changes to floppy select
+logic [3:0] old_select;
+logic select_change = 1'b0;
+always @(posedge clk_sys) begin
+	old_select <= floppy_drive;
+	if(old_select != floppy_drive) select_change <= 1'b1;
+	else select_change <= 1'b0;
+end
 
 // Rework this to be generic
 always @(*) begin
@@ -471,204 +481,208 @@ always @(posedge clk_sys) begin
 				else set_irq_clr <= 1'b1;	// Else clear interrupt
 				if(cmd[3:2] == 2'b01) irq_at_index <= 1'b1;
 			end
-		 end
+		end
 
-		// execute command if motor is not supposed to be running or
-		// wait for motor spinup to finish
-		if(busy && fd_ready && !delaying) begin
+		// Disable busy mode if select changes
+		if(select_change) busy <= 1'b0;
+		else begin		
+			// execute command if motor is not supposed to be running or
+			// wait for motor spinup to finish
+			if(busy && fd_ready && !delaying) begin
 
-			// ------------------------ TYPE I -------------------------
-			if(cmd_type_1) begin
-				// evaluate command
-				case (seek_state)
-				0: begin
-					// restore
-					if(cmd[7:4] == 4'b0000) begin
-						if (fd_track0) begin
-							track_clear_strobe <= 1'b1;
-							seek_state <= 2;
-						end else begin
+				// ------------------------ TYPE I -------------------------
+				if(cmd_type_1) begin
+					// evaluate command
+					case (seek_state)
+					0: begin
+						// restore
+						if(cmd[7:4] == 4'b0000) begin
+							if (fd_track0) begin
+								track_clear_strobe <= 1'b1;
+								seek_state <= 2;
+							end else begin
+								step_dir <= 1'b1;
+								seek_state <= 1;
+							end
+						end
+
+						// seek
+						if(cmd[7:4] == 4'b0001) begin
+							if (track == step_to) seek_state <= 2;
+							else begin
+								step_dir <= (step_to < track);
+								seek_state <= 1;
+							end
+						end
+
+						// step
+						if(cmd[7:5] == 3'b001) seek_state <= 1;
+
+						// step-in
+						if(cmd[7:5] == 3'b010) begin
+							step_dir <= 1'b0;
+							seek_state <= 1;
+						end
+
+						// step-out
+						if(cmd[7:5] == 3'b011) begin
 							step_dir <= 1'b1;
 							seek_state <= 1;
 						end
 					end
 
-					// seek
-					if(cmd[7:4] == 4'b0001) begin
-						if (track == step_to) seek_state <= 2;
-						else begin
-							step_dir <= (step_to < track);
-							seek_state <= 1;
+					// do the step
+					1: begin
+						if (step_dir) begin
+							step_in <= 1'b1;
+							step_out <= 1'b0;
+						end else begin
+							step_out <= 1'b1;
+							step_in <= 1'b0;
+						end
+
+						// update the track register if seek/restore or the update flag set
+						if( (!cmd[6] && !cmd[5]) || ((cmd[6] || cmd[5]) && cmd[4]))
+						begin
+							if (step_dir)
+								track_dec_strobe <= 1'b1;
+							else
+								track_inc_strobe <= 1'b1;
+						end
+
+						seek_state <= (!cmd[6] && !cmd[5]) ? 0 : 2; // loop for seek/restore
+					end
+
+					// verify
+					2: begin
+						if (cmd[2]) begin
+							delay_cnt <= 16'd3*CLK_EN; // TODO: implement verify, now just delay one more step
+							RNF <= 1'b0;
+						end
+						seek_state <= 3;
+					end
+
+					// finish
+					3: begin
+						begin
+							busy <= 1'b0;
+							//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+							irq_set <= 1'b1; // emit irq when command done
+							seek_state <= 0;
 						end
 					end
+					endcase
+				end // if (cmd_type_1)
 
-					// step
-					if(cmd[7:5] == 3'b001) seek_state <= 1;
-
-					// step-in
-					if(cmd[7:5] == 3'b010) begin
-						step_dir <= 1'b0;
-						seek_state <= 1;
-					end
-
-					// step-out
-					if(cmd[7:5] == 3'b011) begin
-						step_dir <= 1'b1;
-						seek_state <= 1;
-					end
-				   end
-
-				// do the step
-				1: begin
-					if (step_dir) begin
-						step_in <= 1'b1;
-						step_out <= 1'b0;
-					end else begin
-						step_out <= 1'b1;
-						step_in <= 1'b0;
-					end
-
-					// update the track register if seek/restore or the update flag set
-					if( (!cmd[6] && !cmd[5]) || ((cmd[6] || cmd[5]) && cmd[4]))
-					begin
-						if (step_dir)
-							track_dec_strobe <= 1'b1;
-						else
-							track_inc_strobe <= 1'b1;
-					end
-
-					seek_state <= (!cmd[6] && !cmd[5]) ? 0 : 2; // loop for seek/restore
-				   end
-
-				// verify
-				2: begin
-					if (cmd[2]) begin
-						delay_cnt <= 16'd3*CLK_EN; // TODO: implement verify, now just delay one more step
-						RNF <= 1'b0;
-					end
-					seek_state <= 3;
-				   end
-
-				// finish
-				3: begin
-					 begin
-						busy <= 1'b0;
-						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-						irq_set <= 1'b1; // emit irq when command done
-						seek_state <= 0;
-					end
-				   end
-				endcase
-			end // if (cmd_type_1)
-
-			// ------------------------ TYPE II -------------------------
-			if(cmd_type_2) begin
-				if(!floppy_present) begin
-					// no image selected -> send irq after 6 ms
-					if (!notready_wait) begin
-						delay_cnt <= 16'd6*CLK_EN;
-						notready_wait <= 1'b1;
-					end else begin
-						RNF <= 1'b1;
-						busy <= 1'b0;
-						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-						irq_set <= 1'b1; // emit irq when command done
-					end
-				end else if (sector_not_found) begin
-					busy <= 1'b0;
-					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-					irq_set <= 1'b1; // emit irq when command done
-					RNF <= 1'b1;
-				end else if (cmd[2] && !notready_wait) begin
-					// e flag: 15 ms settling delay
-					delay_cnt <= 16'd15*CLK_EN;
-					notready_wait <= 1'b1;
-					// read sector
-				end else begin
-					if(cmd[7:5] == 3'b100) begin
-						if ((sector - SECTOR_BASE) >= fd_spt) begin
-							// wait 5 rotations (1 sec) before setting RNF
-							sector_not_found <= 1'b1;
-							delay_cnt <= 24'd1000 * CLK_EN;
+				// ------------------------ TYPE II -------------------------
+				if(cmd_type_2) begin
+					if(!floppy_present) begin
+						// no image selected -> send irq after 6 ms
+						if (!notready_wait) begin
+							delay_cnt <= 16'd6*CLK_EN;
+							notready_wait <= 1'b1;
 						end else begin
-							if (fifo_cpuptr == 0) sd_card_read <= 1;
-							// we are busy until the right sector header passes under 
-							// the head and the sd-card controller indicates the sector
-							// is in the fifo
-							if(sd_card_done) data_transfer_can_start <= 1;
-//							if(fd_ready && fd_sector_hdr && (fd_sector == sector) && data_transfer_can_start) begin
-							if(fd_ready && data_transfer_can_start) begin
-								data_transfer_can_start <= 0;
-								data_transfer_start <= 1;
-							end
+							RNF <= 1'b1;
+							busy <= 1'b0;
+							//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+							irq_set <= 1'b1; // emit irq when command done
+						end
+					end else if (sector_not_found) begin
+						busy <= 1'b0;
+						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						irq_set <= 1'b1; // emit irq when command done
+						RNF <= 1'b1;
+					end else if (cmd[2] && !notready_wait) begin
+						// e flag: 15 ms settling delay
+						delay_cnt <= 16'd15*CLK_EN;
+						notready_wait <= 1'b1;
+						// read sector
+					end else begin
+						if(cmd[7:5] == 3'b100) begin
+							if ((sector - SECTOR_BASE) >= fd_spt) begin
+								// wait 5 rotations (1 sec) before setting RNF
+								sector_not_found <= 1'b1;
+								delay_cnt <= 24'd1000 * CLK_EN;
+							end else begin
+								if (fifo_cpuptr == 0) sd_card_read <= 1;
+								// we are busy until the right sector header passes under 
+								// the head and the sd-card controller indicates the sector
+								// is in the fifo
+								if(sd_card_done) data_transfer_can_start <= 1;
+	//							if(fd_ready && fd_sector_hdr && (fd_sector == sector) && data_transfer_can_start) begin
+								if(fd_ready && data_transfer_can_start) begin
+									data_transfer_can_start <= 0;
+									data_transfer_start <= 1;
+								end
 
-							if(data_transfer_done) begin
-								if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
-								else begin
-									busy <= 1'b0;
-									//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-									irq_set <= 1'b1; // emit irq when command done
-									RNF <= 1'b0;
+								if(data_transfer_done) begin
+									if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
+									else begin
+										busy <= 1'b0;
+										//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+										irq_set <= 1'b1; // emit irq when command done
+										RNF <= 1'b0;
+									end
 								end
 							end
 						end
-					end
 
-					// write sector
-					if(cmd[7:5] == 3'b101) begin
-						if ((sector - SECTOR_BASE) >= fd_spt) begin
-							// wait 5 rotations (1 sec) before setting RNF
-							sector_not_found <= 1'b1;
-							delay_cnt <= 24'd1000 * CLK_EN;
-						end else begin
-							if (fifo_cpuptr == 0) data_transfer_start <= 1'b1;
-							if (data_transfer_done) sd_card_write <= 1;
-							if (sd_card_done) begin
-								if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
-								else begin
-									busy <= 1'b0;
-									//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-									irq_set <= 1'b1; // emit irq when command done
-									RNF <= 1'b0;
+						// write sector
+						if(cmd[7:5] == 3'b101) begin
+							if ((sector - SECTOR_BASE) >= fd_spt) begin
+								// wait 5 rotations (1 sec) before setting RNF
+								sector_not_found <= 1'b1;
+								delay_cnt <= 24'd1000 * CLK_EN;
+							end else begin
+								if (fifo_cpuptr == 0) data_transfer_start <= 1'b1;
+								if (data_transfer_done) sd_card_write <= 1;
+								if (sd_card_done) begin
+									if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
+									else begin
+										busy <= 1'b0;
+										//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+										irq_set <= 1'b1; // emit irq when command done
+										RNF <= 1'b0;
+									end
 								end
 							end
 						end
 					end
 				end
-			end
 
-			// ------------------------ TYPE III -------------------------
-			if(cmd_type_3) begin
-				if(!floppy_present) begin
-					// no image selected -> send irq immediately
-					busy <= 1'b0; 
-					//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-					irq_set <= 1'b1; // emit irq when command done
-				end else begin
-					// read track TODO: fake
-					if(cmd[7:4] == 4'b1110) begin
-						busy <= 1'b0;
+				// ------------------------ TYPE III -------------------------
+				if(cmd_type_3) begin
+					if(!floppy_present) begin
+						// no image selected -> send irq immediately
+						busy <= 1'b0; 
 						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
-					end else
-
-					// write track TODO: fake - also catches 0xFE/0xFF Percom Doubler command handled elsewhere
-					if(cmd[7:4] == 4'b1111) begin
-						busy <= 1'b0;
-						//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-						irq_set <= 1'b1; // emit irq when command done
-					end else
-
-					// read address
-					if(cmd[7:4] == 4'b1100) begin
-						// we are busy until the next setor header passes under the head
-						if(fd_ready && fd_sector_hdr)
-							data_transfer_start <= 1'b1;
-
-						if(data_transfer_done) begin
+					end else begin
+						// read track TODO: fake
+						if(cmd[7:4] == 4'b1110) begin
 							busy <= 1'b0;
 							//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 							irq_set <= 1'b1; // emit irq when command done
+						end else
+
+						// write track TODO: fake - also catches 0xFE/0xFF Percom Doubler command handled elsewhere
+						if(cmd[7:4] == 4'b1111) begin
+							busy <= 1'b0;
+							//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+							irq_set <= 1'b1; // emit irq when command done
+						end else
+
+						// read address
+						if(cmd[7:4] == 4'b1100) begin
+							// we are busy until the next setor header passes under the head
+							if(fd_ready && fd_sector_hdr)
+								data_transfer_start <= 1'b1;
+
+							if(data_transfer_done) begin
+								busy <= 1'b0;
+								//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+								irq_set <= 1'b1; // emit irq when command done
+							end
 						end
 					end
 				end
