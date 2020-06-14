@@ -406,7 +406,6 @@ reg track_inc_strobe;
 reg track_dec_strobe;
 reg track_clear_strobe;
 reg sector_not_found;
-reg track_not_found;
 // Status fields that change based on DAM and 
 wire sector_read = cmd[7:5] == 3'b100 ? 1'b1 : 1'b0;
 wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
@@ -439,7 +438,6 @@ always @(posedge clk_sys) begin
 		seek_state <= 0;
 		notready_wait <= 1'b0;
 		sector_not_found <= 1'b0;
-		track_not_found <= 1'b0;
 		irq_at_index <= 1'b0;
 	end else if (clk_cpu) begin
 		sd_card_read <= 0;
@@ -496,7 +494,6 @@ always @(posedge clk_sys) begin
 
 					// seek
 					if(cmd[7:4] == 4'b0001) begin
-						track_not_found <= 0;
 						if (track == step_to) seek_state <= 2;
 						else begin
 							step_dir <= (step_to < track);
@@ -730,20 +727,6 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 	.b_din(data_in),
 	.b_dout(fifo_q)
 );
-// dpram #(sector_size_code + 7) fifo
-// (
-// 	.clock(clk_sys),
-
-// 	.address_a(fifo_sdptr),
-// 	.data_a(sd_dout),
-// 	.wren_a(sd_dout_strobe & sd_ack),
-// 	.q_a(sd_din),
-
-// 	.address_b(fifo_cpuptr),
-// 	.data_b(data_in),
-// 	.wren_b(data_in_strobe),
-// 	.q_b(fifo_q)
-// );
 
 // ------------------ SD card control ------------------------
 localparam SD_IDLE = 0;
@@ -886,14 +869,7 @@ begin
 		s1 = 1'b1;
 	end
 	else begin
-		if(cmd_type_1) begin 
-			s6 = floppy_write_protected;
-			s5 = seeking && track_not_found ? 1'b1 : 1'b0; 	// LDOS fix
-			s4 = seeking && track_not_found ? 1'b0 : RNF;
-			s2 = fd_track0;
-			s1 = ~fd_index;
-		end 
-		else if(cmd_type_2) begin
+		if(cmd_type_2) begin
 			if(sector_read) begin
 				s6 = 1'b0;
 				s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
@@ -914,10 +890,10 @@ begin
 			s2 = data_lost;
 			s1 = drq;
 		end
-		else begin //cmd_type_4 or unknown state
+		else begin //cmd_type_1,4 or unknown state
 			s6 = floppy_write_protected;
-			s5 = 1'b1; // was 0
-			s4 = 1'b0;
+			s5 = 1'b0; 	// LDOS fix
+			s4 = RNF;
 			s2 = fd_track0;
 			s1 = ~fd_index;
 		end
