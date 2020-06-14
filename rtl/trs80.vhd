@@ -203,9 +203,7 @@ end component ;
 
 component fdc1771 is
 		generic (
-			SYS_CLK : integer;		-- Main system clock
-			SECTOR_SIZE_CODE : std_logic_vector(1 downto 0);
-			SECTOR_BASE : integer
+			SYS_CLK : integer		-- Main system clock
 		);
 		port (
 			clk_sys  		: in std_logic;
@@ -487,9 +485,7 @@ end process;
 
 fdc : fdc1771
 generic map (
-	SYS_CLK => 42578000,		-- sys_clk speed
-	SECTOR_SIZE_CODE => "01",	-- 256 byte sectors
-	SECTOR_BASE => 0
+	SYS_CLK => 42578000		-- sys_clk speed
 )
 port map
 (
