@@ -389,10 +389,10 @@ reg step_in, step_out;
 // Moved to Floppy.v
 // the step rate is only valid for command type I
 wire [15:0] step_delay_ms = 
-           (cmd[1:0]==2'b00) ? 16'd12:   // 12ms
-           (cmd[1:0]==2'b01) ? 16'd12:   // 12ms
-           (cmd[1:0]==2'b10) ? 16'd20:   // 20ms
-           16'd40;                      //  40ms
+           (cmd[1:0]==2'b00) ? 16'd6:   // 12ms
+           (cmd[1:0]==2'b01) ? 16'd6:   // 12ms
+           (cmd[1:0]==2'b10) ? 16'd12:   // 20ms
+           16'd20;                      //  40ms
 
 reg [31:0] delay_cnt;
 
@@ -520,17 +520,22 @@ always @(posedge clk_sys) begin
 
 				// do the step
 				1: begin
-					if (step_dir)
+					if (step_dir) begin
 						step_in <= 1'b1;
-					else
+						step_out <= 1'b0;
+					end else begin
 						step_out <= 1'b1;
+						step_in <= 1'b0;
+					end
 
 					// update the track register if seek/restore or the update flag set
 					if( (!cmd[6] && !cmd[5]) || ((cmd[6] || cmd[5]) && cmd[4]))
+					begin
 						if (step_dir)
 							track_dec_strobe <= 1'b1;
 						else
 							track_inc_strobe <= 1'b1;
+					end
 
 					seek_state <= (!cmd[6] && !cmd[5]) ? 0 : 2; // loop for seek/restore
 				   end
@@ -873,13 +878,13 @@ begin
 		if(cmd_type_2) begin
 			if(sector_read) begin
 				s6 = 1'b0;
-				s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
+				s5 = (fd_track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
 			end 
 			else begin	// else sector write
 				s6 = floppy_write_protected;
 				s5 = 1'b0;
 			end
-			s4 = RNF;
+			s4 = !floppy_present; //s4 = RNF;
 			s2 = data_lost;
 			s1 = drq;
 		end 
@@ -887,14 +892,14 @@ begin
 			if(cmd[7:4] == 4'b1111) s6 = floppy_write_protected;	// write track
 			else s6 = 1'b0;
 			s5 = 1'b0;
-			s4 = 1'b0;
+			s4 = !floppy_present; //1'b0;
 			s2 = data_lost;
 			s1 = drq;
 		end
 		else begin //cmd_type_1,4 or unknown state
 			s6 = floppy_write_protected;
-			s5 = 1'b0; 	// LDOS fix
-			s4 = RNF;
+			s5 = fd_ready; 	// LDOS fix
+			s4 = !floppy_present; //s4 = RNF;
 			s2 = fd_track0;
 			s1 = ~fd_index;
 		end
@@ -905,7 +910,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = {!motor_on & floppy_present, 
+wire [7:0] status = {!motor_on | notready_wait, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
