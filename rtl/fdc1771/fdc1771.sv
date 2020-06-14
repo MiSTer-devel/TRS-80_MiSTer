@@ -148,6 +148,7 @@ always @(*) begin
 		image_doubleside = 1'b1;
 		image_spt = image_hd ? 5'd10 : 5'd5;
 		image_gap_len = 10'd220;
+		image_sps = 10'd350;
 	end else begin
 		// this block is valid for the .st format (or similar arrangement)
 		image_doubleside = 1'b0;
