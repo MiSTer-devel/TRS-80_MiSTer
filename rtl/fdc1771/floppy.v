@@ -35,7 +35,7 @@ module floppy (
 	input  [1:0] density,		// 0 - SD, 1 - DD, 2 - HD
 
 	output 	     dclk_en,      // data clock enable - gates transfer to CPU
-	output [6:0] track,        // number of track under head - nn
+	output [7:0] track,        // number of track under head - nn
 	output [4:0] sector,       // number of sector under head, 0 = no sector - nn
 	output 	     sector_hdr,   // valid sector header under head - nn
 	output 	     sector_data,  // valid sector data under head - nn
@@ -85,7 +85,7 @@ assign ready = select && (rate == (density==2'b00 ? RATESD : density==2'b01 ? RA
 // and lasts INDEX_PULSE_CYCLES system clock cycles
 wire [31:0] INDEX_PULSE_CYCLES;
 assign INDEX_PULSE_CYCLES = (INDEX_PULSE_LEN * SYS_CLK / 1000) / clk_div;
-reg [18:0] index_pulse_cnt;
+reg [23:0] index_pulse_cnt;
 always @(posedge clk) begin
 	if(index_pulse_start && (index_pulse_cnt >= INDEX_PULSE_CYCLES-1)) begin
 		index <= 1'b0;
@@ -103,29 +103,29 @@ end
 wire [31:0] STEP_BUSY_CLKS = ((SYS_CLK/1000)*step_delay_ms)/clk_div;  // steprate is in ms
 
 assign track = current_track;
-reg [6:0] current_track /* verilator public */ = 7'd0;
+reg [7:0] current_track /* verilator public */ = 7'd0;
 
 reg step_inD;
 reg step_outD;
-reg [19:0] step_busy /* verilator public */;
+reg [23:0] step_busy /* verilator public */;
    
 always @(posedge clk) begin
 	step_inD <= step_in;
 	step_outD <= step_out;
 
 	if(step_busy != 0)
-		step_busy <= step_busy - 18'd1;
+		step_busy <= step_busy - 24'd1;
 
 	if(select) begin
 		// rising edge of step signal starts step
 		if(step_in && !step_inD) begin
-			if(current_track != 0) current_track <= current_track - 7'd1;
-				step_busy <= STEP_BUSY_CLKS[19:0];
+			if(current_track != 0) current_track <= current_track - 8'd1;
+				step_busy <= STEP_BUSY_CLKS[23:0];
 		end
 
 		if(step_out && !step_outD) begin
-			if(current_track != TRACKS-1) current_track <= current_track + 7'd1;
-				step_busy <= STEP_BUSY_CLKS[19:0];
+			if(current_track != TRACKS-1) current_track <= current_track + 8'd1;
+				step_busy <= STEP_BUSY_CLKS[23:0];
 		end
 	end
 end
@@ -198,8 +198,8 @@ end
 // thus we need to support up to 31250 events
 // Drives byte_cnt for above sector state, and index_pulse_start
 // Clocked on byte_clk_en (see below)
-reg [14:0] byte_cnt;
-reg 	   index_pulse_start;
+(* preserve *) reg [14:0] byte_cnt;
+(* preserve *) reg index_pulse_start;
 always @(posedge clk) begin
 	if (byte_clk_en) begin
 		index_pulse_start <= 1'b0;

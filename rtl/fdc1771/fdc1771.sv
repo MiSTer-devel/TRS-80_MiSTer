@@ -261,7 +261,7 @@ end
 // -------------------------------------------------------------------------
 wire fd0_index;
 wire fd0_ready;
-wire [6:0] fd0_track;
+wire [7:0] fd0_track;
 wire [4:0] fd0_sector;
 wire fd0_sector_hdr;
 wire fd0_sector_data;
@@ -300,7 +300,7 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy0 (
 // -------------------------------------------------------------------------
 wire fd1_index;
 wire fd1_ready;
-wire [6:0] fd1_track;
+wire [7:0] fd1_track;
 wire [4:0] fd1_sector;
 wire fd1_sector_hdr;
 wire fd1_sector_data;
@@ -346,7 +346,7 @@ wire fd_ready =        (!floppy_drive[0])?fd0_ready:
                        (!floppy_drive[1])?fd1_ready:
                        1'b0;
 
-wire [6:0] fd_track =  (!floppy_drive[0])?fd0_track:
+wire [7:0] fd_track =  (!floppy_drive[0])?fd0_track:
                        (!floppy_drive[1])?fd1_track:
                        7'd0;
 
@@ -1074,8 +1074,8 @@ always @(posedge clk_sys) begin
 		end
 
 		if (sector_inc_strobe) sector <= sector + 1'd1;
-		if (track_inc_strobe) track <= track + 1'd1;
-		if (track_dec_strobe) track <= track - 1'd1;
+		if (track_inc_strobe) track <= track + 8'd1;
+		if (track_dec_strobe) track <= track - 8'd1;
 		if (track_clear_strobe) track <= 8'd0;
 	end
 end
