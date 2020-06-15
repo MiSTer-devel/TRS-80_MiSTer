@@ -277,12 +277,12 @@ end
 reg [31:0] clk_cnt;
 always @(posedge clk) begin
 	data_clk_en <= 0;
-	if(clk_cnt + rate > (SYS_CLK)/2) begin
-		clk_cnt <= clk_cnt - ((SYS_CLK)/2 - rate);
+	if(clk_cnt + rate*clk_div > (SYS_CLK)/2) begin
+		clk_cnt <= clk_cnt - ((SYS_CLK)/2 - rate*clk_div);
 		data_clk <= !data_clk;
 		if (~data_clk) data_clk_en <= 1;
 	end else
-		clk_cnt <= clk_cnt + rate;
+		clk_cnt <= clk_cnt + rate*clk_div;
 end
 
 endmodule
