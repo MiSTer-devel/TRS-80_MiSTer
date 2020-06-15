@@ -87,10 +87,10 @@ wire [31:0] INDEX_PULSE_CYCLES;
 assign INDEX_PULSE_CYCLES = (INDEX_PULSE_LEN * SYS_CLK / 1000) / clk_div;
 reg [18:0] index_pulse_cnt;
 always @(posedge clk) begin
-	if(index_pulse_start && (index_pulse_cnt == INDEX_PULSE_CYCLES-1)) begin
+	if(index_pulse_start && (index_pulse_cnt >= INDEX_PULSE_CYCLES-1)) begin
 		index <= 1'b0;
 		index_pulse_cnt <= 19'd0;
-	end else if(index_pulse_cnt == INDEX_PULSE_CYCLES-1)
+	end else if(index_pulse_cnt >= INDEX_PULSE_CYCLES-1)
 		index <= 1'b1;
 	else
 		index_pulse_cnt <= index_pulse_cnt + 1'd1;
@@ -204,7 +204,7 @@ always @(posedge clk) begin
 	if (byte_clk_en) begin
 		index_pulse_start <= 1'b0;
 
-		if(byte_cnt == ((density==2'b00 ? BPTSD : density==2'b1 ? BPTDD : BPTHD)-1'd1)) begin
+		if(byte_cnt == ((density==2'b00 ? BPTSD : density==2'b01 ? BPTDD : BPTHD)-1'd1)) begin
 			byte_cnt <= 0;
 			index_pulse_start <= 1'b1;
 		end else
@@ -249,21 +249,21 @@ always @(posedge clk) begin
 	if(motor_onD != motor_on_sel)
 		spin_up_counter <= 32'd0;
 	else begin
-		spin_up_counter <= spin_up_counter + (density==2'b00 ? RATESD : density==2'b1 ? RATEDD : RATEHD);
+		spin_up_counter <= spin_up_counter + (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD);
       
 		if(motor_on_sel) begin
 			// spinning up
 			if(spin_up_counter > SPIN_UP_CLKS) begin
-				if(rate < (density==2'b00 ? RATESD : density==2'b1 ? RATEDD : RATEHD))
+				if(rate < (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD))
 					rate <= rate + 32'd1;
-				spin_up_counter <= spin_up_counter - (SPIN_UP_CLKS - (density==2'b00 ? RATESD : density==2'b1 ? RATEDD : RATEHD));
+				spin_up_counter <= spin_up_counter - (SPIN_UP_CLKS - (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD));
 			end
 		end else begin
 			// spinning down
 			if(spin_up_counter > SPIN_DOWN_CLKS) begin
 				if(rate > 0)
 					rate <= rate - 32'd1;
-				spin_up_counter <= spin_up_counter - (SPIN_DOWN_CLKS - (density==2'b00 ? RATESD : density==2'b1 ? RATEDD : RATEHD));
+				spin_up_counter <= spin_up_counter - (SPIN_DOWN_CLKS - (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD));
 			end
 		end // else: !if(motor_on)
 	end // else: !if(motor_onD != motor_on)
