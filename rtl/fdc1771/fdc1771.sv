@@ -372,7 +372,6 @@ wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1];
 
 wire fd_track0 = (fd_track == 0);
 
-assign drives_mapped = {fd1_ready, fd0_ready};
 // -------------------------------------------------------------------------
 // ----------------------- internal state machines -------------------------
 // -------------------------------------------------------------------------
@@ -752,6 +751,7 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 localparam SD_IDLE = 0;
 localparam SD_READ = 1;
 localparam SD_WRITE = 2;
+localparam SD_READ_BF_WRITE = 3;
 
 reg [1:0] sd_state;
 reg       sd_card_write;
@@ -785,24 +785,20 @@ always @(posedge clk_sys) begin
 
 	SD_READ:
 	if (sd_ackD & ~sd_ack) begin
-//		if (s_odd || sector_size_code != 3) begin
-			sd_state <= SD_IDLE;
-			sd_card_done <= 1; // to be on the safe side now, can be issued earlier
-//		end else begin
-//			s_odd <= 1;
-//			sd_rd <= ~{ floppy_drive[1], floppy_drive[0] };
-//		end
+		sd_state <= SD_IDLE;
+		sd_card_done <= 1; // to be on the safe side now, can be issued earlier
 	end
 
 	SD_WRITE:
 	if (sd_ackD & ~sd_ack) begin
-//		if (s_odd || sector_size_code != 3) begin
-			sd_state <= SD_IDLE;
-			sd_card_done <= 1;
-//		end else begin
-//			s_odd <= 1;
-//			sd_wr <= ~{ floppy_drive[1], floppy_drive[0] };
-//		end
+		sd_state <= SD_IDLE;
+		sd_card_done <= 1;
+	end
+
+	SD_READ_BF_WRITE:
+	if (sd_ackD & ~sd_ack) begin
+		sd_state <= SD_IDLE;
+		sd_card_done <= 0; // to be on the safe side now, can be issued earlier
 	end
 
 	default: ;
