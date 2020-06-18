@@ -134,10 +134,10 @@ reg [1:0] floppy_ready = 0;
 wire         floppy_present = (floppy_drive == 4'b1110)?floppy_ready[0]:
                               (floppy_drive == 4'b1101)?floppy_ready[1]:1'b0;
 
-// wire floppy_write_protected = (floppy_drive == 4'b1110)?img_wp[0]:
-//                               (floppy_drive == 4'b1101)?img_wp[1]:1'b1;
+wire floppy_write_protected = (floppy_drive == 4'b1110)?img_wp[0]:
+                              (floppy_drive == 4'b1101)?img_wp[1]:1'b1;
 
-wire floppy_write_protected = 1'b1 /* synthesis keep */;
+//wire floppy_write_protected = 1'b1 /* synthesis keep */;
 
 reg  [10:0] sector_len[2];
 reg   [4:0] spt[2];     // sectors/track
@@ -422,6 +422,8 @@ wire sector_write = cmd[7:5] == 3'b101 ? 1'b1 : 1'b0;
 reg set_irq_clr;
 reg notready_wait;
 reg [1:0] seek_state /* synthesis keep */;
+reg read_bf_write;
+reg reset_cpuptr;
 
 always @(posedge clk_sys) begin
 	reg data_transfer_can_start;
@@ -449,6 +451,8 @@ always @(posedge clk_sys) begin
 		notready_wait <= 1'b0;
 		sector_not_found <= 1'b0;
 		irq_at_index <= 1'b0;
+		read_bf_write <= 1'b0;
+		reset_cpuptr <= 1'b0;
 	end else if (clk_cpu) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
@@ -456,6 +460,7 @@ always @(posedge clk_sys) begin
 
 		step_in <= 1'b0;
 		step_out <= 1'b0;
+		reset_cpuptr <= 1'b0;
 
 		// delay timer
 		if(delay_cnt != 0) 
@@ -466,6 +471,7 @@ always @(posedge clk_sys) begin
 			busy <= 1'b1;
 			notready_wait <= 1'b0;
 			sector_not_found <= 1'b0;
+			read_bf_write <= 1'b0;
 
 			if(cmd_type_1 || cmd_type_2 || cmd_type_3) begin
 				//motor_on <= 1'b1;
@@ -633,15 +639,28 @@ always @(posedge clk_sys) begin
 								sector_not_found <= 1'b1;
 								delay_cnt <= 24'd1000 * CLK_EN;
 							end else begin
-								if (fifo_cpuptr == 0) data_transfer_start <= 1'b1;
-								if (data_transfer_done) sd_card_write <= 1;
-								if (sd_card_done) begin
-									if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
-									else begin
-										busy <= 1'b0;
-										//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-										irq_set <= 1'b1; // emit irq when command done
-										RNF <= 1'b0;
+								// Read before write handling for 256 byte sectors
+								if (sector_size_code == 2'b01) begin
+									// Stage 0, read SD card
+									if (fifo_cpuptr == 0 && read_bf_write==1'b0 && !sd_card_done) sd_card_read <= 1'b1;
+									// Stage 1, read SD card done
+									if (sd_card_done && read_bf_write==1'b0) begin
+										read_bf_write <= 1'b1;
+										reset_cpuptr <= 1'b1;
+									end
+								end
+								// Read data from CPU into dpram
+								if (sector_size_code != 2'b01 || read_bf_write==1'b1) begin									
+									if (fifo_cpuptr==0) data_transfer_start <= 1'b1;
+									if (data_transfer_done) sd_card_write <= 1;
+									if (sd_card_done) begin
+										if (cmd[4]) sector_inc_strobe <= 1'b1; // multiple sector transfer
+										else begin
+											busy <= 1'b0;
+											//motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+											irq_set <= 1'b1; // emit irq when command done
+											RNF <= 1'b0;
+										end
 									end
 								end
 							end
@@ -751,7 +770,6 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 localparam SD_IDLE = 0;
 localparam SD_READ = 1;
 localparam SD_WRITE = 2;
-localparam SD_READ_BF_WRITE = 3;
 
 reg [1:0] sd_state;
 reg       sd_card_write;
@@ -795,12 +813,6 @@ always @(posedge clk_sys) begin
 		sd_card_done <= 1;
 	end
 
-	SD_READ_BF_WRITE:
-	if (sd_ackD & ~sd_ack) begin
-		sd_state <= SD_IDLE;
-		sd_card_done <= 0; // to be on the safe side now, can be issued earlier
-	end
-
 	default: ;
 	endcase
 end
@@ -814,7 +826,7 @@ always @(posedge clk_sys) begin
 
 	// reset fifo read pointer on reception of a new command or 
 	// when multi-sector transfer increments the sector number
-	if(cmd_rx || sector_inc_strobe) begin
+	if(cmd_rx || sector_inc_strobe || reset_cpuptr) begin
 		data_transfer_cnt <= 11'd0;
 		fifo_cpuptr <= 10'd0;
 	end
@@ -830,7 +842,7 @@ always @(posedge clk_sys) begin
 			data_transfer_cnt <= 11'd6+11'd1;
 
 		// read/write sector has sector_size data bytes
-		if(cmd[7:6] == 2'b10)
+		if(cmd[7:6] == 2'b10 || read_bf_write)
 			data_transfer_cnt <= sector_size + 1'd1;
 	end
 

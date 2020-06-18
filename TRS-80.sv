@@ -144,6 +144,7 @@ localparam CONF_STR = {
 	"OE,Video Flicker,Off,On;",
 	"O7,Lowercase Type,Normal,Symbol;",
 	"OCD,Overscan,None,Partial,Full;",
+	"OF,Overscan Status Line,Off,On;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
@@ -314,6 +315,7 @@ trs80 trs80
 	.overscan(status[13:12]),
 	.overclock(status[9:8]),
 	.flicker(status[14]),
+	.debug(status[15]),
 
 	.dn_clk(clk_sys),
 	.dn_go(trsram_download),

@@ -73,6 +73,7 @@ Port (
 	overscan   : in  STD_LOGIC_VECTOR(1 downto 0);
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
 	flicker	   : in  STD_LOGIC;
+	debug	   : in  STD_LOGIC;
 
 	dn_clk     : in  std_logic;
 	dn_go      : in  std_logic;
@@ -680,7 +681,7 @@ port map
 	din => cpudo,
 	dout => vramdo,
 	
-	debug_enable => '1',			-- Enable to show disk debugging
+	debug_enable => debug,			-- Enable to show disk debugging
 	dbugmsg_addr => dbugmsg_addr,
 	dbugmsg_data => dbugmsg_data,
 
