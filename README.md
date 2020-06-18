@@ -22,15 +22,15 @@ The TRS-80 with Disk Drives attached will boot to a screen of '@' symbols and wi
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
 
 ### To load files from DSK images:
-There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 127 tracks.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
+There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 250 tracks, all tracks must currently hold 10 x 256 byte sectors.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
 
-The Disk emulation supports reading and writing to JV1 formatted disks, but disks cannot be created in the core because there is no Write Track support for JV1 images.  There are many different DOS versions for the TRS-80 with som popular ones including TRSDOS, NEWDOS/80 and MULTIDOS.  For beginners it is recommended you use TRSDOS which is the original DOS produced by Radio Shack.  Instructions for using TRSDOS can be found in the following Wikipedia article: https://en.wikipedia.org/wiki/TRSDOS
+The Disk emulation supports reading and writing to JV1 formatted disks, but disks cannot be formatted in the core because there is no Write Track support for JV1 images.  There are many different DOS versions for the TRS-80 with popular ones including TRSDOS, NEWDOS/80 and MULTIDOS.  For beginners it is recommended you use TRSDOS which is the original DOS produced by Radio Shack.  Instructions for using TRSDOS can be found in the following Wikipedia article: https://en.wikipedia.org/wiki/TRSDOS
 
 ## Features:
- * Simulates a TRS-80 Model I with 48KB installed
- * Simulates dual TRS-80 drives within Expansion interface
- * Real Time Clock (RTC) support
- * Debug Status Line for disk troubleshooting
+ * TRS-80 Model I with 48KB installed
+ * Expansion interface with dual disk drives
+ * Real Time Clock (RTC)
+ * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
  
