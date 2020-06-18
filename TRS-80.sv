@@ -124,12 +124,6 @@ assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQM
 
 assign BUTTONS = 0;
 
-// aspect ratio including all border space is  4:3
-// aspect ratio iwith partial border space is 20:17
-// aspect ratio of only displayed area is     11:10
-assign VIDEO_ARX = status[13] ? 4 : (status[12] ? 20 : 11);
-assign VIDEO_ARY = status[13] ? 3 : (status[12] ? 17 : 10);
-
 assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
@@ -140,6 +134,9 @@ assign LED_USER  = ioctl_download;
 `include "build_id.v"
 localparam CONF_STR = {
 	"TRS-80;;",
+	"S0,DSKJV1,Mount Disk 0:;",
+ 	"S1,DSKJV1,Mount Disk 1:;",
+	"-;",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
@@ -147,18 +144,19 @@ localparam CONF_STR = {
 	"OE,Video Flicker,Off,On;",
 	"O7,Lowercase Type,Normal,Symbol;",
 	"OCD,Overscan,None,Partial,Full;",
+	"OF,Overscan Status Line,Off,On;",
 	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
-	"O89,Clockspeed (MHz),1.78(1x),2.67(1.5x),3.56(2x),21.36(12x);",
+	"O89,Clockspeed (MHz),1.78(1x),3.56(2x),5.34(3x),21.29(12x);",
 	"-;",
 	"R0,Reset;",
 	"J,Fire;",
 	"V,v",`BUILD_DATE
 };
 
-(* preserve *) wire clk_sys;
+wire clk_sys;
 pll pll
 (
 	.refclk   (CLK_50M),
@@ -174,6 +172,17 @@ wire [15:0] ioctl_addr;
 wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
 wire		ioctl_wait;
+wire [31:0] sd_lba;
+wire  [1:0] sd_rd;
+wire  [1:0] sd_wr;
+wire        sd_ack;
+wire  [8:0] sd_buff_addr;
+wire  [7:0] sd_buff_dout;
+wire  [7:0] sd_buff_din;
+wire        sd_buff_wr;
+wire  [1:0] img_mounted;
+wire        img_readonly;
+wire [63:0] img_size;
 
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
@@ -182,7 +191,7 @@ wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
+hps_io #(.STRLEN(($size(CONF_STR)>>3)), .WIDE(0), .VDNUM(2) ) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -204,7 +213,20 @@ hps_io #(.STRLEN(($size(CONF_STR)>>3) )) hps_io
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_data),
 	.ioctl_wait(ioctl_wait),
-	.ioctl_index(ioctl_index)
+	.ioctl_index(ioctl_index),
+
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size)
 );
 
 wire rom_download = ioctl_download && ioctl_index==0;
@@ -218,8 +240,7 @@ wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
 wire loader_wait;
-(* preserve *) wire [31:0] iterations;
-
+//(* preserve *) wire [31:0] iterations;
 
 cmd_loader cmd_loader
 (
@@ -238,8 +259,8 @@ cmd_loader cmd_loader
 	.loader_addr(loader_addr),
 	.loader_data(loader_data),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable),
-	.iterations(iterations)		// Debugging only
+	.execute_enable(execute_enable)
+//	.iterations(iterations)		// Debugging only
 );
 
 wire trsram_wr;			// Writing loader data to ram 
@@ -248,13 +269,27 @@ wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
 
 assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
-assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 0;
+assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 1'b0;
 assign trsram_addr = loader_download ? {8'b0, loader_addr} : {|ioctl_index,ioctl_addr};
 assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
 
-ht1080z ht1080z
+wire [1:0] fdc_wp = 2'b0;
+wire       fdc_irq;
+wire       fdc_drq;
+wire [1:0] fdc_addr;
+wire       fdc_sel;
+wire       fdc_rw;
+wire [7:0] fdc_din;
+wire [7:0] fdc_dout;
+
+// Map all such broken accesses to drive A only
+//wire [1:0] floppy_sel = 2'b10;	// ** Need to change from code
+
+//wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
+
+trs80 trs80
 (
 	.reset(reset),
 	.clk42m(clk_sys),
@@ -280,6 +315,7 @@ ht1080z ht1080z
 	.overscan(status[13:12]),
 	.overclock(status[9:8]),
 	.flicker(status[14]),
+	.debug(status[15]),
 
 	.dn_clk(clk_sys),
 	.dn_go(trsram_download),
@@ -289,7 +325,21 @@ ht1080z ht1080z
 
 	.loader_download(loader_download),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable)
+	.execute_enable(execute_enable),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size),
+
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_dout_strobe(sd_buff_wr)
+
 );
 
 ///////////////////////////////////////////////////
@@ -298,12 +348,18 @@ wire [17:0] RGB;
 wire        HSync,VSync,HBlank,VBlank;
 
 wire  [2:0] scale = status[3:1];
-wire  [2:0] sl = scale ? scale - 1'd1 : 3'd0;
+wire  [2:0] sl = scale > 1'd1 ? scale - 1'd1 : 3'b000;
+
+// aspect ratio including all border space is  4:3
+// aspect ratio iwith partial border space is 20:17
+// aspect ratio of only displayed area is     11:10
+assign VIDEO_ARX = ~|status[13:12] ? 4 : (status[12] ? 40 : 40);
+assign VIDEO_ARY = ~|status[13:12] ? 3 : (status[12] ? 29 : 28);
 
 assign CLK_VIDEO = clk_sys;
 assign VGA_SL = sl[1:0];
 
-video_mixer #(.LINE_LENGTH(640), .GAMMA(1)) video_mixer
+video_mixer #(.LINE_LENGTH(672), .GAMMA(1)) video_mixer
 (
 	.*,
 
@@ -312,7 +368,7 @@ video_mixer #(.LINE_LENGTH(640), .GAMMA(1)) video_mixer
 
 	.scanlines(0),
 	.scandoubler(scale || forced_scandoubler),
-	.hq2x(scale==1),
+	.hq2x(scale==3'b001),
 
 	.mono(0),
 

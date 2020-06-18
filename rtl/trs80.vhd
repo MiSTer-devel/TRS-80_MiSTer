@@ -44,7 +44,7 @@ use IEEE.STD_LOGIC_ARITH.ALL;
 use IEEE.STD_LOGIC_UNSIGNED.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
-entity ht1080z is
+entity trs80 is
 Port (
 	reset      : in  std_logic;
 
@@ -73,6 +73,7 @@ Port (
 	overscan   : in  STD_LOGIC_VECTOR(1 downto 0);
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
 	flicker	   : in  STD_LOGIC;
+	debug	   : in  STD_LOGIC;
 
 	dn_clk     : in  std_logic;
 	dn_go      : in  std_logic;
@@ -82,11 +83,25 @@ Port (
 
 	loader_download : in std_logic;
 	execute_addr	: in std_logic_vector(15 downto 0);
-	execute_enable	: in std_logic
-);
-end ht1080z;
+	execute_enable	: in std_logic;
 
-architecture Behavioral of ht1080z is
+	img_mounted   	: in std_logic_vector(1 downto 0);
+	img_readonly   	: in std_logic_vector(1 downto 0);
+	img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
+
+	sd_lba 	  		: out std_logic_vector(31 downto 0);
+	sd_rd		   	: out std_logic_vector(1 downto 0);
+	sd_wr		   	: out std_logic_vector(1 downto 0);
+	sd_ack	    	: in std_logic;
+	sd_buff_addr   	: in std_logic_vector(8 downto 0);
+	sd_buff_dout   	: in std_logic_vector(7 downto 0);
+	sd_buff_din	   	: out std_logic_vector(7 downto 0);
+	sd_dout_strobe 	: in std_logic
+
+);
+end trs80;
+
+architecture Behavioral of trs80 is
 
 
 --
@@ -96,7 +111,7 @@ architecture Behavioral of ht1080z is
 type debugbuf is array(0 to 63) of std_logic_vector(7 downto 0);
 
 signal msgbuf : debugbuf:=(
-x"44",x"65",x"62",x"75",x"67",x"20",x"4D",x"65",x"73",x"73",x"61",x"67",x"65",x"20",x"20",x"20",
+x"44",x"65",x"62",x"75",x"67",x"20",x"4D",x"65",x"73",x"73",x"61",x"67",x"65",x"3a",x"20",x"20",
 x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",
 x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",
 x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20",x"20"
@@ -187,6 +202,53 @@ component z80_regset is
 	);
 end component ;
 
+component fdc1771 is
+		generic (
+			SYS_CLK : integer		-- Main system clock
+		);
+		port (
+			clk_sys  		: in std_logic;
+			clk_cpu  		: in std_logic;
+			clk_div	    	: in integer;
+
+			floppy_drive    : in std_logic_vector(3 downto 0);
+			floppy_side		: in std_logic;
+			floppy_reset	: in std_logic;
+			motor_on		: in std_logic;
+
+			irq				: out std_logic;
+			drq				: out std_logic;
+
+			cpu_addr    	: in std_logic_vector(1 downto 0);
+			cpu_sel	    	: in std_logic;
+			cpu_rd	    	: in std_logic;
+			cpu_wr	    	: in std_logic;
+			cpu_din	    	: in std_logic_vector(7 downto 0);
+			cpu_dout    	: out std_logic_vector(7 downto 0);
+			
+			img_mounted   	: in std_logic_vector(1 downto 0);
+			img_wp		   	: in std_logic_vector(1 downto 0);
+			img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
+
+			sd_lba 	  		: out std_logic_vector(31 downto 0);
+			sd_rd		   	: out std_logic_vector(1 downto 0);
+			sd_wr		   	: out std_logic_vector(1 downto 0);
+			sd_ack	    	: in std_logic;
+			sd_buff_addr   	: in std_logic_vector(8 downto 0);
+			sd_dout		   	: in std_logic_vector(7 downto 0);
+			sd_din		   	: out std_logic_vector(7 downto 0);
+			sd_dout_strobe 	: in std_logic;
+
+			fdc_new_command : out std_logic;
+
+			cmd_out		    : out  std_logic_vector(7 downto 0);	
+			track_out		: out  std_logic_vector(7 downto 0);	
+			sector_out		: out  std_logic_vector(7 downto 0);	
+			data_in_out		: out  std_logic_vector(7 downto 0);	
+			status_out		: out  std_logic_vector(7 downto 0)
+		);
+end component ;
+
 signal ch_a  : std_logic_vector(7 downto 0);
 signal ch_b  : std_logic_vector(7 downto 0);
 signal ch_c  : std_logic_vector(7 downto 0);
@@ -202,6 +264,7 @@ signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
 signal cpuclk,cpuclk_r : std_logic;
+signal clk_25ms : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo,kbdout : std_logic_vector(7 downto 0);
@@ -212,13 +275,20 @@ signal modif : std_logic_vector(2 downto 0);
 signal romrd,ramrd,ramwr,vramsel,kbdsel : std_logic;
 signal ior,iow,memr,memw : std_logic;
 
-
-signal reg_37ec : std_logic_vector(7 downto 0) := x"00";
-signal write_reg_37ec : std_logic := '0';
+-- Local copy of disk registers for debugging
+--signal reg_37ec : std_logic_vector(31 downto 0) := x"00000000";
+signal dbg_cmd : std_logic_vector(7 downto 0);
+signal dbg_track : std_logic_vector(7 downto 0);
+signal dbg_sector : std_logic_vector(7 downto 0);
+signal dbg_data_in : std_logic_vector(7 downto 0);
+signal dbg_status : std_logic_vector(7 downto 0);
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
 signal clk1774_div : std_logic_vector(5 downto 0) := "010111";
+signal clk_25ms_div : integer := 1064450;
+signal tick_1s : std_logic := '0';
+signal tick_counter : integer := 40;
 
 signal sndBC1,sndBDIR,sndCLK : std_logic;
 
@@ -259,6 +329,44 @@ signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, I
 -- Gated CPU clock
 signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
 
+-- Disk controller signals
+signal fdc_irq : std_logic := '1';
+signal old_fdc_irq : std_logic := '1';
+signal fdc_irq_latch : std_logic := '1';
+signal fdc_drq : std_logic;
+signal fdc_wp : std_logic_vector(1 downto 0); -- = "00";
+signal fdc_addr : std_logic_vector(1 downto 0);
+signal fdc_sel : std_logic;
+signal fdc_sel2 : std_logic;
+signal fdc_rd : std_logic;
+signal fdc_wr : std_logic;
+signal fdc_din : std_logic_vector(7 downto 0);
+signal fdc_dout : std_logic_vector(7 downto 0);
+signal fdc_drive : std_logic_vector(1 downto 0);
+signal fdc_strobe : std_logic := '0';
+signal fdc_rd_strobe : std_logic := '0';
+signal fdc_wr_strobe : std_logic := '0';
+signal fdc_new_command : std_logic;
+signal floppy_select : std_logic_vector(3 downto 0);
+signal floppy_select_write : std_logic;
+signal irq_latch_read : std_logic;
+signal old_latch_read : std_logic := '1';
+signal fdc_clk_div : integer;
+signal fdc_slow_latch : std_logic := '0';
+
+signal clk_25ms_latch : std_logic := '1';
+signal old_clk_25ms : std_logic := '0';
+signal expansion_irq : std_logic := '1';
+
+type motor_state is (stopped, spinup, running);
+signal fdc_motor_state : motor_state;
+signal fdc_motor_on : std_logic := '0';
+signal fdc_motor_countdown : integer := 0;
+-- debugging counter
+signal counter : std_logic_vector(31 downto 0) := (others => '0');  -- Used for debugging via SignalTap
+attribute noprune: boolean; 
+attribute noprune of counter: signal is true; -- set to false for RTL
+
 begin
 
 GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
@@ -276,23 +384,195 @@ port map
 
 led <= taperead;
 
+-- Generate 25ms clock for RTC in expansion interface
+process(clk42m)
+begin
+	if rising_edge(clk42m) then
+		clk_25ms <= '0';
+
+		-- CPU clock divider
+		if clk_25ms_div = 0 then	-- count down rather than up, as overclock may change
+			clk_25ms <= '1';
+			clk_25ms_div <= 1064450;   -- speed = 25ms for RTC
+		else
+			clk_25ms_div <= clk_25ms_div - 1;
+		end if;
+	end if;
+end process;
+
+
+-- RTC and FDC irq latch circuit
+process(clk42m, reset)
+begin
+	if reset='1' then
+		clk_25ms_latch <= '1';
+		fdc_irq_latch <= '1';
+	else
+		if rising_edge(clk42m) then
+			if(clk_25ms='1') then -- latch on rising edge
+				clk_25ms_latch <= '0';
+			end if;
+
+			old_fdc_irq <= fdc_irq;
+			if (old_fdc_irq='1' and fdc_irq='0') then
+				fdc_irq_latch <= '0';
+			end if;	
+
+			old_latch_read <= irq_latch_read;
+			if (old_latch_read='1' and irq_latch_read='0') then
+				clk_25ms_latch <= '1';
+				fdc_irq_latch <= '1';
+			end if;
+		end if;
+	end if;
+end process;
+
+-- 1 second tick counter
+process(clk42m, reset)
+begin
+	if reset='1' then
+		tick_1s <= '0';
+		tick_counter <= 40;	-- 40 hz counter
+	else
+		if rising_edge(clk42m) then
+			if clk_25ms='1' then
+				if tick_counter = 0 then
+					tick_1s <= not tick_1s;
+					tick_counter <= 40;
+				else 
+					tick_counter <= tick_counter - 1;
+				end if;
+			end if;
+		end if;
+	end if;
+end process;
+
+-- Motor controller state machine for auto spinup and spin down
+process(clk42m, reset)
+begin
+	if reset='1' then
+		fdc_motor_state <= stopped;	-- start with motor stopped
+		fdc_motor_countdown <= 0;
+		fdc_motor_on <= '0';
+	else
+		if rising_edge(clk42m) then
+			case fdc_motor_state is
+				when stopped =>	-- Motor off
+					fdc_motor_on <= '0';
+					if(floppy_select_write='1') then
+						fdc_motor_state <= spinup;
+						-- Countdown in 25ms ticks - 0.5 seconds to start
+						fdc_motor_countdown <= 20 / fdc_clk_div;
+					end if;
+				when spinup =>	-- Motor spinning up
+					if(fdc_motor_countdown=0) then
+						fdc_motor_state <= running;
+						-- Countdown in 25ms ticks - 3 seconds to idle
+						fdc_motor_countdown <=  (40 * 3) / fdc_clk_div;
+						fdc_motor_on <= '1';
+					else 
+						if clk_25ms='1' then
+							fdc_motor_countdown <= fdc_motor_countdown - 1;
+						end if;
+					end if;
+				when running => 	-- Motor running
+					if(fdc_motor_countdown=0) then
+						fdc_motor_state <= stopped;	-- idle timeout
+						fdc_motor_on <= '0';
+					else
+						-- Reset on floppy select or new command received by fdv
+						if(floppy_select_write='1' or fdc_new_command='1') then
+							fdc_motor_countdown <= (40 * 3) / fdc_clk_div; -- reset countdown on select
+						else
+							if clk_25ms='1' then
+								fdc_motor_countdown <= fdc_motor_countdown - 1;
+							end if;
+						end if;
+					end if;
+			end case;			
+		end if;
+	end if;
+end process;
+
+fdc : fdc1771
+generic map (
+	SYS_CLK => 42578000		-- sys_clk speed
+)
+port map
+(
+	clk_sys	=> clk42m,
+	clk_cpu => cpuClk,
+	clk_div => fdc_clk_div,
+
+	floppy_drive => floppy_select,			-- ** Link up to drive select code
+	floppy_side => '1',				-- Only single sided for now
+	floppy_reset => not reset,
+	motor_on => fdc_motor_on,
+
+	irq => fdc_irq,					
+	drq => fdc_drq,
+
+	cpu_addr => cpua(1 downto 0),
+	cpu_sel => fdc_sel2,	-- Calculated on falling edge of fdc_rd or fdc_wr signal
+	cpu_rd => fdc_rd,
+	cpu_wr => fdc_wr,
+	cpu_din => fdc_din,
+	cpu_dout => fdc_dout,
+
+	-- The following signals are all passed in from the Top module
+	img_mounted => img_mounted,
+	img_wp => img_readonly,
+	img_size => img_size,
+
+	sd_lba => sd_lba,
+	sd_rd => sd_rd,
+	sd_wr => sd_wr,
+	sd_ack => sd_ack,
+	sd_buff_addr => sd_buff_addr,
+	sd_dout => sd_buff_dout,
+	sd_din => sd_buff_din,
+	sd_dout_strobe => sd_dout_strobe,
+
+	fdc_new_command => fdc_new_command,
+
+	-- Debugging for overscan
+	cmd_out => dbg_cmd,
+	track_out => dbg_track,
+	sector_out => dbg_sector,
+	data_in_out => dbg_data_in,
+	status_out => dbg_status
+
+);
+
+-- Generate main CPU Clock
 process(clk42m)
 begin
 	if rising_edge(clk42m) then
 		cpuClk <= '0';
+		counter <= counter + 1;  -- debugging counter
 
 		-- CPU clock divider
 		if clk1774_div = "000000" then	-- count down rather than up, as overclock may change
 			cpuClk     <= '1';
 			
 			if taperead = '1' then
-				clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)  --> override during tape read
+				clk1774_div <= "000001"; 	--  12x speed = 21.36 (42MHz /  2)  --> override during tape read
+				fdc_clk_div <= 12;  		
+			elsif fdc_slow_latch = '1' then
+				clk1774_div <= "010111"; 	--  1x speed = 21.36 (42MHz /  2)  
+				fdc_clk_div <= 1;  			-- override during read if override enabled (port 254)
 			else
 				case overclock(1 downto 0) is
 					when "00" => clk1774_div <= "010111";  --   1x speed =  1.78 (42MHz / 24)
-					when "01" => clk1774_div <= "010001";  -- 1.5x speed =  2.67 (42MHz / 18)
-					when "10" => clk1774_div <= "001011";  --   2x speed =  3.58 (42MHz / 12)
-					when "11" => clk1774_div <= "000001";  --  12x speed = 21.36 (42MHz /  2)
+					when "01" => clk1774_div <= "001011";  -- 	2x speed =  3.58 (42MHz / 12)
+					when "10" => clk1774_div <= "000111";  --   3x speed =  5.34 (42MHz /  8)
+					when "11" => clk1774_div <= "000001";  --  12x speed = 21.29 (42MHz /  2)
+				end case;
+				case overclock(1 downto 0) is
+					when "00" => fdc_clk_div <= 1;  --   1x speed =  1.78 (42MHz / 24)
+					when "01" => fdc_clk_div <= 2;  --   2x speed =  3.58 (42MHz / 12)
+					when "10" => fdc_clk_div <= 3;  --   3x speed =  5.34 (42MHz /  8)
+					when "11" => fdc_clk_div <= 12;  --  12x speed = 21.29 (42MHz /  2)
 				end case;
 			end if;
 		else
@@ -313,6 +593,42 @@ vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
 
+fdc_din <= cpudo;
+fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
+fdc_rd <= not fdc_sel or memr;
+fdc_wr <= not fdc_sel or memw;
+fdc_sel2 <= (fdc_rd xor fdc_wr);
+floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
+irq_latch_read <= '1' when cpua(15 downto 0)=x"37e0" and memr='0' else '0';
+expansion_irq <= clk_25ms_latch and fdc_irq_latch;
+
+-- Holmes Sprinter FDC override speed
+process(clk42m, reset)
+begin
+	if reset='1' then
+		fdc_slow_latch <= '0';
+	else
+		if rising_edge(clk42m) then
+			if iow='0' and cpua(7 downto 0)=x"fe" then
+				fdc_slow_latch <= not cpudo(0);
+			end if;
+		end if;
+	end if;
+end process;
+
+process(clk42m, reset)
+begin
+	if reset='1' then
+		floppy_select <= "1111";
+	else
+		if rising_edge(clk42m) then
+			if(floppy_select_write='1') then
+				floppy_select <= not cpudo(3 downto 0);
+			end if;
+		end if;
+	end if;
+end process;
+
 cpu : entity work.T80pa
 port map
 (
@@ -320,6 +636,7 @@ port map
 	CLK     => clk42m, -- 1.75 MHz
 	CEN_p   => GCLK,
 	M1_n    => cpum1,
+	INT_n	=> expansion_irq,
 	MREQ_n  => cpumreq,
 	IORQ_n  => cpuiorq,
 	RD_n    => cpurd,
@@ -333,9 +650,11 @@ port map
 );
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
-         kbdout when kbdsel='1' else												-- keyboard ($3800-$3BFF)
-			
-			ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
+		 kbdout when kbdsel='1' else	
+		 fdc_dout when fdc_rd='0' else	
+		 -- Floppy select and irq signals	
+		 (not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
+  		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
 
          x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
 
@@ -362,7 +681,7 @@ port map
 	din => cpudo,
 	dout => vramdo,
 	
-	debug_enable => '0',			-- Enable to show disk debugging
+	debug_enable => debug,			-- Enable to show disk debugging
 	dbugmsg_addr => dbugmsg_addr,
 	dbugmsg_data => dbugmsg_data,
 
@@ -393,19 +712,85 @@ process(clk42m)
 begin
 	if rising_edge(clk42m) then
 
-		-- test write into 0x37EC register.
-		-- currently not working; fix later
-		--
-		if (write_reg_37ec='1') then
-			reg_37ec <= cpudo;
-		end if;
-
 		-- override columns 14/15 to display hex for register reg_37ec:
-		if (dbugmsg_addr = 14) then								--	column 14
-			dbugmsg_data <= hex(conv_integer(reg_37ec(7 downto 4)));
+		if (dbugmsg_addr = 15) then				-- drive select
+			dbugmsg_data <= x"44";				-- D
+		elsif (dbugmsg_addr = 16) then			
+			if(floppy_select(0)='0') then		-- D0
+				dbugmsg_data <= x"31";
+			else
+				dbugmsg_data <= x"30";
+			end if;
+		elsif (dbugmsg_addr = 17) then			-- D1
+			if(floppy_select(1)='0') then
+				dbugmsg_data <= x"31";
+			else
+				dbugmsg_data <= x"30";
+			end if;
+		elsif (dbugmsg_addr = 18) then			-- D2
+			if(floppy_select(2)='0') then
+				dbugmsg_data <= x"31";
+			else
+				dbugmsg_data <= x"30";
+			end if;
+		elsif (dbugmsg_addr = 19) then			-- D3
+			if(floppy_select(3)='0') then
+				dbugmsg_data <= x"31";
+			else
+				dbugmsg_data <= x"30";
+			end if;
+		elsif (dbugmsg_addr = 20) then							
+			dbugmsg_data <= x"2c";				-- comma
 
-		elsif (dbugmsg_addr = 15) then							--	column 15
-			dbugmsg_data <= hex(conv_integer(reg_37ec(3 downto 0)));
+		elsif (dbugmsg_addr = 21) then			-- command						
+			dbugmsg_data <= x"43";				-- C
+		elsif (dbugmsg_addr = 22) then			
+			dbugmsg_data <= hex(conv_integer(dbg_cmd(7 downto 4)));
+		elsif (dbugmsg_addr = 23) then							
+			dbugmsg_data <= hex(conv_integer(dbg_cmd(3 downto 0)));
+		elsif (dbugmsg_addr = 24) then							
+			dbugmsg_data <= x"2c";				-- comma
+
+		elsif (dbugmsg_addr = 25) then			-- track						
+			dbugmsg_data <= x"54";				-- T
+		elsif (dbugmsg_addr = 26) then			
+			dbugmsg_data <= hex(conv_integer(dbg_track(7 downto 4)));
+		elsif (dbugmsg_addr = 27) then							
+			dbugmsg_data <= hex(conv_integer(dbg_track(3 downto 0)));
+		elsif (dbugmsg_addr = 28) then							
+			dbugmsg_data <= x"2c";				-- comma
+
+		elsif (dbugmsg_addr = 29) then			-- sector
+			dbugmsg_data <= x"53";				-- S
+		elsif (dbugmsg_addr = 30) then			
+			dbugmsg_data <= hex(conv_integer(dbg_sector(7 downto 4)));
+		elsif (dbugmsg_addr = 31) then							
+			dbugmsg_data <= hex(conv_integer(dbg_sector(3 downto 0)));
+		elsif (dbugmsg_addr = 32) then							
+			dbugmsg_data <= x"2c";				-- comma
+
+		elsif (dbugmsg_addr = 33) then			-- data written
+			dbugmsg_data <= x"64";				-- d
+		elsif (dbugmsg_addr = 34) then			
+			dbugmsg_data <= hex(conv_integer(dbg_data_in(7 downto 4)));
+		elsif (dbugmsg_addr = 35) then							
+			dbugmsg_data <= hex(conv_integer(dbg_data_in(3 downto 0)));
+		elsif (dbugmsg_addr = 36) then							
+			dbugmsg_data <= x"2c";				-- comma
+
+		elsif (dbugmsg_addr = 37) then			-- status
+			dbugmsg_data <= x"73";				-- s
+		elsif (dbugmsg_addr = 38) then			-- status
+			dbugmsg_data <= hex(conv_integer(dbg_status(7 downto 4)));
+		elsif (dbugmsg_addr = 39) then							
+			dbugmsg_data <= hex(conv_integer(dbg_status(3 downto 0)));
+
+		elsif (dbugmsg_addr = 41) then			-- Tick Counter (after space)
+			if(tick_1s='0') then
+				dbugmsg_data <= x"20";
+			else
+				dbugmsg_data <= x"2a";
+			end if;
 
 		--
 		-- otherwise split the remainder: first half just reads from the default text buffer,
@@ -414,14 +799,11 @@ begin
 		elsif (dbugmsg_addr < 32) then							-- 1st half from string literal
 			dbugmsg_data <= msgbuf(conv_integer( dbugmsg_addr ));
 		else
-			dbugmsg_data <= (dbugmsg_addr + x"40");			-- last half calculated
+			dbugmsg_data <=  x"20";			-- spaces
 		end if;
 		
 	end if;
 end process;
-
-write_reg_37ec <= '1' when cpua(15 downto 0)=x"37EC" and memw='0' else '0';
-
 
 kbdpar : keyboard
 port map
@@ -508,7 +890,7 @@ with rgbi select ht_rgb_green <=
 	"001101111111001101" when "1000", -- P1 Phosphor RGB #33FF33
 	"000000000000000000" when "1001",
 	"000000111100000000" when "1010",
-	"000000111100000000" when "1011",
+	"000000000000100000" when "1011",
 	"000000000000000000" when "1100",
 	"000000000000000000" when "1101",
 	"000000111110000000" when "1110",
@@ -564,7 +946,7 @@ port map
 ram_a_addr <= dn_addr(16 downto 0) when dn_wr = '1' else io_ram_addr(16 downto 0);
 ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 
-process (clk42m,dn_go,reset)
+process (clk42m,dn_go,loader_download,reset)
 begin
 	if (dn_go='1' and loader_download='0') or reset='1' then
 		io_ram_addr <= x"010000"; -- above 64k
