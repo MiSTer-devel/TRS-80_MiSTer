@@ -1,6 +1,6 @@
-# TRS-80_MiSTer
+# [TRS-80](https://en.wikipedia.org/wiki/TRS-80) for MiSTer Platform
 ## Model I Support ##
-This is a port of HT1080Z MiST core by Jozsef Laszlo to the MiSTer
+This is a port of [HT1080Z MiST core](https://github.com/mist-devel/ht1080z) by Jozsef Laszlo to the MiSTer
 
 **NOTE: This core was renamed from ht1080z to TRS-80.  If you are using the old core, be sure to rename the ht1080z directory to trs-80 on the MiSTer SD Card**
 
