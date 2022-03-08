@@ -47,14 +47,24 @@ set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
 set_global_assignment -name ECO_OPTIMIZE_TIMING ON
 set_global_assignment -name PERIPHERY_TO_CORE_PLACEMENT_AND_ROUTING_OPTIMIZATION ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING ON
-set_global_assignment -name ALM_REGISTER_PACKING_EFFORT LOW
-set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 1.0
+set_global_assignment -name ALM_REGISTER_PACKING_EFFORT MEDIUM
 set_global_assignment -name SEED 1
+
+#set_global_assignment -name VERILOG_MACRO "MISTER_FB=1"
+
+#enable it only if 8bit indexed mode is used in core
+#set_global_assignment -name VERILOG_MACRO "MISTER_FB_PALETTE=1"
+
+#do not enable DEBUG_NOHDMI in release!
+#set_global_assignment -name VERILOG_MACRO "MISTER_DEBUG_NOHDMI=1"
+
+# disable bilinear filtering when downscaling
+#set_global_assignment -name VERILOG_MACRO "MISTER_DOWNSCALE_NN=1"
+
+# disable adaptive scanline filtering
+#set_global_assignment -name VERILOG_MACRO "MISTER_DISABLE_ADAPTIVE=1"
 
 source sys/sys.tcl
 source sys/sys_analog.tcl
 source files.qip
-set_global_assignment -name ENABLE_SIGNALTAP OFF
-set_global_assignment -name USE_SIGNALTAP_FILE stp1.stp
-set_global_assignment -name SIGNALTAP_FILE stp1.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

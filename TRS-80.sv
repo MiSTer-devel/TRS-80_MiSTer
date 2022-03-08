@@ -17,7 +17,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [45:0] HPS_BUS,
+	inout  [48:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -27,8 +27,9 @@ module emu
 	output        CE_PIXEL,
 
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output  [7:0] VIDEO_ARX,
-	output  [7:0] VIDEO_ARY,
+	//if VIDEO_ARX[12] or VIDEO_ARY[12] is set then [11:0] contains scaled size instead of aspect ratio.
+	output [12:0] VIDEO_ARX,
+	output [12:0] VIDEO_ARY,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -38,6 +39,40 @@ module emu
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
+	output        VGA_SCALER, // Force VGA scaler
+
+	input  [11:0] HDMI_WIDTH,
+	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
+
+`ifdef MISTER_FB
+	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// FB_FORMAT:
+	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
+	//    [3]   : 0=16bits 565 1=16bits 1555
+	//    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
+	//
+	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
+	output        FB_EN,
+	output  [4:0] FB_FORMAT,
+	output [11:0] FB_WIDTH,
+	output [11:0] FB_HEIGHT,
+	output [31:0] FB_BASE,
+	output [13:0] FB_STRIDE,
+	input         FB_VBL,
+	input         FB_LL,
+	output        FB_FORCE_BLANK,
+
+`ifdef MISTER_FB_PALETTE
+	// Palette control for 8bit modes.
+	// Ignored for other video modes.
+	output        FB_PAL_CLK,
+	output  [7:0] FB_PAL_ADDR,
+	output [23:0] FB_PAL_DOUT,
+	input  [23:0] FB_PAL_DIN,
+	output        FB_PAL_WR,
+`endif
+`endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -52,16 +87,16 @@ module emu
 	// b[0]: osd button
 	output  [1:0] BUTTONS,
 
-
+	input         CLK_AUDIO, // 24.576 MHz
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
-	output        AUDIO_S, // 1 - signed audio samples, 0 - unsigned
+	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
 	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
-	input         TAPE_IN,
+
 	//ADC
 	inout   [3:0] ADC_BUS,
 
-	// SD-SPI
+	//SD-SPI
 	output        SD_SCK,
 	output        SD_MOSI,
 	input         SD_MISO,
@@ -94,13 +129,26 @@ module emu
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
 
+`ifdef MISTER_DUAL_SDRAM
+	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
+	input         SDRAM2_EN,
+	output        SDRAM2_CLK,
+	output [12:0] SDRAM2_A,
+	output  [1:0] SDRAM2_BA,
+	inout  [15:0] SDRAM2_DQ,
+	output        SDRAM2_nCS,
+	output        SDRAM2_nCAS,
+	output        SDRAM2_nRAS,
+	output        SDRAM2_nWE,
+`endif
+
 	input         UART_CTS,
 	output        UART_RTS,
 	input         UART_RXD,
 	output        UART_TXD,
 	output        UART_DTR,
 	input         UART_DSR,
-
 
 	// Open-drain User port.
 	// 0 - D+/RX
@@ -112,8 +160,8 @@ module emu
 
 	input         OSD_STATUS
 );
-
 assign VGA_F1=0;
+assign HDMI_FREEZE = 0;
 
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
@@ -171,14 +219,16 @@ wire        ioctl_wr;
 wire [15:0] ioctl_addr;
 wire  [7:0] ioctl_data;
 wire  [7:0] ioctl_index;
-wire		ioctl_wait;
-wire [31:0] sd_lba;
+wire	    ioctl_wait;
+wire [31:0] sd_lba[2];
+wire [31:0] sd_lba_0;
 wire  [1:0] sd_rd;
 wire  [1:0] sd_wr;
-wire        sd_ack;
+wire  [1:0] sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
-wire  [7:0] sd_buff_din;
+wire  [7:0] sd_buff_din_0;
+wire  [7:0] sd_buff_din[2];
 wire        sd_buff_wr;
 wire  [1:0] img_mounted;
 wire        img_readonly;
@@ -191,12 +241,10 @@ wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
 
-hps_io #(.STRLEN(($size(CONF_STR)>>3)), .WIDE(0), .VDNUM(2) ) hps_io
+hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(2) ) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
-
-	.conf_str(CONF_STR),
 
 	.ps2_key(ps2_key),
 
@@ -331,16 +379,22 @@ trs80 trs80
 	.img_readonly(img_readonly),
 	.img_size(img_size),
 
-	.sd_lba(sd_lba),
+	.sd_lba(sd_lba_0),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
-	.sd_ack(sd_ack),
+	.sd_ack(sd_ack[0]|sd_ack[1]),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
+	.sd_buff_din(sd_buff_din_0),
 	.sd_dout_strobe(sd_buff_wr)
 
 );
+
+assign sd_buff_din[0]=sd_buff_din_0;
+assign sd_buff_din[1]=sd_buff_din_0;
+assign sd_lba[0]=sd_lba_0;
+assign sd_lba[1]=sd_lba_0;
+
 
 ///////////////////////////////////////////////////
 wire        ce_pix;
@@ -349,7 +403,7 @@ wire        HSync,VSync,HBlank,VBlank;
 
 wire  [2:0] scale = status[3:1];
 wire  [2:0] sl = scale > 1'd1 ? scale - 1'd1 : 3'b000;
-
+wire freeze_sync;
 // aspect ratio including all border space is  4:3
 // aspect ratio iwith partial border space is 20:17
 // aspect ratio of only displayed area is     11:10
@@ -363,14 +417,9 @@ video_mixer #(.LINE_LENGTH(672), .GAMMA(1)) video_mixer
 (
 	.*,
 
-	.clk_vid(clk_sys),
-	.ce_pix_out(CE_PIXEL),
-
-	.scanlines(0),
 	.scandoubler(scale || forced_scandoubler),
 	.hq2x(scale==3'b001),
 
-	.mono(0),
 
 	.R({RGB[5:0],RGB[5:4]}),
 	.G({RGB[11:6],RGB[11:10]}),

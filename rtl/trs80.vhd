@@ -87,15 +87,15 @@ Port (
 
 	img_mounted   	: in std_logic_vector(1 downto 0);
 	img_readonly   	: in std_logic_vector(1 downto 0);
-	img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
+	img_size  	: in std_logic_vector(31 downto 0); -- in bytes
 
-	sd_lba 	  		: out std_logic_vector(31 downto 0);
-	sd_rd		   	: out std_logic_vector(1 downto 0);
-	sd_wr		   	: out std_logic_vector(1 downto 0);
+	sd_lba	 	: out std_logic_vector(31 downto 0);
+	sd_rd	   	: out std_logic_vector(1 downto 0);
+	sd_wr	   	: out std_logic_vector(1 downto 0);
 	sd_ack	    	: in std_logic;
 	sd_buff_addr   	: in std_logic_vector(8 downto 0);
 	sd_buff_dout   	: in std_logic_vector(7 downto 0);
-	sd_buff_din	   	: out std_logic_vector(7 downto 0);
+	sd_buff_din  	: out std_logic_vector(7 downto 0);
 	sd_dout_strobe 	: in std_logic
 
 );
