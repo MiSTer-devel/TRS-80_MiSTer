@@ -164,6 +164,8 @@ module emu
 
 assign VGA_F1=0;
 assign HDMI_FREEZE = 0;
+assign VGA_SCALER  = 0;
+assign VGA_DISABLE = 0;
 
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
