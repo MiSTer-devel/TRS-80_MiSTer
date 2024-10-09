@@ -370,7 +370,7 @@ wire fd_dclk_en =      (!floppy_drive[0])?fd0_dclk:
                        1'b0;
 
 wire fd_doubleside =   (!floppy_drive[0])?doubleside[0]:doubleside[1];
-wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1]; 
+wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1];
 
 wire fd_track0 = (fd_track == 0);
 
