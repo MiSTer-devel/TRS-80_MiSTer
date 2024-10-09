@@ -121,7 +121,7 @@ end
 always @(*) begin
 	case(sector_size_code)
 		// TRS-80 - 256 bytes
-		2'b01: sd_lba = (((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
+		2'b01: sd_lba = (((fd_spt*track[7:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
 		// Atari ST - 1024 bytes
 		2'b11: sd_lba = {(16'd0 + (fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0], s_odd };
 		// Other
@@ -163,10 +163,12 @@ always @(*) begin
 		// this block is valid for the .st format (or similar arrangement)
 		image_doubleside = 1'b0;
 		image_sps = image_sectors;
-		if (image_sectors > (80*10)) begin
+		if ( (sector_size_code != 1) && (image_sectors > (80*10)) ) begin 
+		// don't do this for TRS80
 			image_doubleside = 1'b1;
 			image_sps = image_sectors >> 1'b1;
 		end
+		
 		//if (image_hd) image_sps = image_sps >> 1'b1;
 
 		// spt : 10
@@ -368,7 +370,7 @@ wire fd_dclk_en =      (!floppy_drive[0])?fd0_dclk:
                        1'b0;
 
 wire fd_doubleside =   (!floppy_drive[0])?doubleside[0]:doubleside[1];
-wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1];
+wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:spt[1]; 
 
 wire fd_track0 = (fd_track == 0);
 
