@@ -888,7 +888,7 @@ always @(posedge clk_sys) begin
 end
 
 // Different logic for fdc1771 status register
-logic s6, s5, s4, s2, s1;
+logic s6, s5, s4, s2, s1, s0;
 always_comb
 begin
 	if(!floppy_present) begin		// Pull-ups if no disk attached
@@ -897,6 +897,7 @@ begin
 		s4 = 1'b0;
 		s2 = 1'b1;
 		s1 = 1'b1;
+		s0 = 1'b0;
 	end
 	else begin
 		if(cmd_type_2) begin
@@ -927,6 +928,7 @@ begin
 			s2 = fd_track0;
 			s1 = ~fd_index;
 		end
+		s0 = busy ;
 	end
 end
 
@@ -941,7 +943,7 @@ wire [7:0] status = {!motor_on | notready_wait,
 		      1'b0,                                // crc error
 		      s2,
 		      s1,
-		      busy }; /* synthesis keep */
+		      s0 }; // busy /* synthesis keep */
 
 reg [7:0] track; /* verilator public */
 reg [7:0] sector;
