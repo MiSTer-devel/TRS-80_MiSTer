@@ -121,7 +121,7 @@ end
 always @(*) begin
 	case(sector_size_code)
 		// TRS-80 - 256 bytes
-		2'b01: sd_lba = (((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
+		2'b01: sd_lba = (((fd_spt*track[7:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
 		// Atari ST - 1024 bytes
 		2'b11: sd_lba = {(16'd0 + (fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0], s_odd };
 		// Other
@@ -163,10 +163,12 @@ always @(*) begin
 		// this block is valid for the .st format (or similar arrangement)
 		image_doubleside = 1'b0;
 		image_sps = image_sectors;
-		if (image_sectors > (80*10)) begin
+		if ( (sector_size_code != 1) && (image_sectors > (80*10)) ) begin 
+		// don't do this for TRS80
 			image_doubleside = 1'b1;
 			image_sps = image_sectors >> 1'b1;
 		end
+		
 		//if (image_hd) image_sps = image_sps >> 1'b1;
 
 		// spt : 10
@@ -886,7 +888,7 @@ always @(posedge clk_sys) begin
 end
 
 // Different logic for fdc1771 status register
-logic s6, s5, s4, s2, s1;
+logic s6, s5, s4, s2, s1, s0;
 always_comb
 begin
 	if(!floppy_present) begin		// Pull-ups if no disk attached
@@ -895,6 +897,7 @@ begin
 		s4 = 1'b0;
 		s2 = 1'b1;
 		s1 = 1'b1;
+		s0 = 1'b0;
 	end
 	else begin
 		if(cmd_type_2) begin
@@ -925,6 +928,7 @@ begin
 			s2 = fd_track0;
 			s1 = ~fd_index;
 		end
+		s0 = busy ;
 	end
 end
 
@@ -939,7 +943,7 @@ wire [7:0] status = {!motor_on | notready_wait,
 		      1'b0,                                // crc error
 		      s2,
 		      s1,
-		      busy }; /* synthesis keep */
+		      s0 }; // busy /* synthesis keep */
 
 reg [7:0] track; /* verilator public */
 reg [7:0] sector;
