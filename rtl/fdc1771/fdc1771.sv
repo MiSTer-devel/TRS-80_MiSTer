@@ -903,7 +903,7 @@ begin
 		if(cmd_type_2) begin
 			if(sector_read) begin
 				s6 = 1'b0;
-				s5 = (fd_track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB
+				s5 = (track==8'd17 ? 1'b1 : 1'b0);	// DIR=F8, NORM=FB FLYNN: replace fd_track by track
 			end 
 			else begin	// else sector write
 				s6 = floppy_write_protected;
