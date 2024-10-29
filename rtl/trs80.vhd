@@ -245,7 +245,8 @@ component fdc1771 is
 			track_out		: out  std_logic_vector(7 downto 0);	
 			sector_out		: out  std_logic_vector(7 downto 0);	
 			data_in_out		: out  std_logic_vector(7 downto 0);	
-			status_out		: out  std_logic_vector(7 downto 0)
+			status_out		: out  std_logic_vector(7 downto 0);
+			spare_out		: out  std_logic_vector(11 downto 0)   -- spare for debugging other stuff FLYNN
 		);
 end component ;
 
@@ -282,6 +283,7 @@ signal dbg_track : std_logic_vector(7 downto 0);
 signal dbg_sector : std_logic_vector(7 downto 0);
 signal dbg_data_in : std_logic_vector(7 downto 0);
 signal dbg_status : std_logic_vector(7 downto 0);
+signal dbg_spare : std_logic_vector(11 downto 0);
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
@@ -393,7 +395,7 @@ begin
 		-- CPU clock divider
 		if clk_25ms_div = 0 then	-- count down rather than up, as overclock may change
 			clk_25ms <= '1';
-			clk_25ms_div <= 1064450;   -- speed = 25ms for RTC
+			clk_25ms_div <= 1064449;   -- speed = 25ms for RTC
 		else
 			clk_25ms_div <= clk_25ms_div - 1;
 		end if;
@@ -438,7 +440,7 @@ begin
 			if clk_25ms='1' then
 				if tick_counter = 0 then
 					tick_1s <= not tick_1s;
-					tick_counter <= 40;
+					tick_counter <= 39;   -- FLYNN
 				else 
 					tick_counter <= tick_counter - 1;
 				end if;
@@ -462,13 +464,27 @@ begin
 					if(floppy_select_write='1') then
 						fdc_motor_state <= spinup;
 						-- Countdown in 25ms ticks - 0.5 seconds to start
-						fdc_motor_countdown <= 20 / fdc_clk_div;
+						-- FLYNN fdc_motor_countdown <= 20 / fdc_clk_div;
+						-- FLYNN removing the divide operations with some more fine-adjusted values to avoid 20/12=1 kind of results
+						case fdc_clk_div is
+							when 1 => fdc_motor_countdown <= 20 ;  
+							when 2 => fdc_motor_countdown <= 10;
+							when 3 => fdc_motor_countdown <= 6;
+							when others => fdc_motor_countdown <= 2;
+						end case;
 					end if;
 				when spinup =>	-- Motor spinning up
 					if(fdc_motor_countdown=0) then
 						fdc_motor_state <= running;
 						-- Countdown in 25ms ticks - 3 seconds to idle
-						fdc_motor_countdown <=  (40 * 3) / fdc_clk_div;
+						-- FLYNN fdc_motor_countdown <=  (40 * 3) / fdc_clk_div;
+						case fdc_clk_div is
+							when 1 => fdc_motor_countdown <= 120 ;  
+							when 2 => fdc_motor_countdown <= 60;
+							when 3 => fdc_motor_countdown <= 40;
+							-- Don't go lower than 40 because we can't afford the FD motor to stop before the SD card response
+							when others => fdc_motor_countdown <= 40;
+						end case;
 						fdc_motor_on <= '1';
 					else 
 						if clk_25ms='1' then
@@ -482,7 +498,14 @@ begin
 					else
 						-- Reset on floppy select or new command received by fdv
 						if(floppy_select_write='1' or fdc_new_command='1') then
-							fdc_motor_countdown <= (40 * 3) / fdc_clk_div; -- reset countdown on select
+							-- FLYNN fdc_motor_countdown <= (40 * 3) / fdc_clk_div; -- reset countdown on select
+							case fdc_clk_div is
+								when 1 => fdc_motor_countdown <= 120 ;  
+								when 2 => fdc_motor_countdown <= 60;
+								when 3 => fdc_motor_countdown <= 40;
+							-- Don't go lower than 40 because we can't afford the FD motor to stop before the SD card response
+								when others => fdc_motor_countdown <= 40;
+							end case;
 						else
 							if clk_25ms='1' then
 								fdc_motor_countdown <= fdc_motor_countdown - 1;
@@ -540,7 +563,8 @@ port map
 	track_out => dbg_track,
 	sector_out => dbg_sector,
 	data_in_out => dbg_data_in,
-	status_out => dbg_status
+	status_out => dbg_status,
+	spare_out => dbg_spare
 
 );
 
@@ -784,8 +808,19 @@ begin
 			dbugmsg_data <= hex(conv_integer(dbg_status(7 downto 4)));
 		elsif (dbugmsg_addr = 39) then							
 			dbugmsg_data <= hex(conv_integer(dbg_status(3 downto 0)));
+		elsif (dbugmsg_addr = 40) then							
+			dbugmsg_data <= x"2c";				-- comma
 
-		elsif (dbugmsg_addr = 41) then			-- Tick Counter (after space)
+		elsif (dbugmsg_addr = 41) then							
+			dbugmsg_data <= x"78";				-- x
+		elsif (dbugmsg_addr = 42) then
+			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
+		elsif (dbugmsg_addr = 43) then
+			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
+		elsif (dbugmsg_addr = 44) then							
+			dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0)));
+			
+		elsif (dbugmsg_addr = 46) then			-- Tick Counter (after space)
 			if(tick_1s='0') then
 				dbugmsg_data <= x"20";
 			else
