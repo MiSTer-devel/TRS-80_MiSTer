@@ -327,7 +327,7 @@ assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
 
-wire [1:0] fdc_wp = 2'b0;
+// wire [1:0] fdc_wp = 2'b0;
 wire       fdc_irq;
 wire       fdc_drq;
 wire [1:0] fdc_addr;
@@ -411,8 +411,8 @@ wire freeze_sync;
 // aspect ratio including all border space is  4:3
 // aspect ratio iwith partial border space is 20:17
 // aspect ratio of only displayed area is     11:10
-assign VIDEO_ARX = ~|status[13:12] ? 4 : (status[12] ? 40 : 40);
-assign VIDEO_ARY = ~|status[13:12] ? 3 : (status[12] ? 29 : 28);
+assign VIDEO_ARX = ~|status[13:12] ? 13'd4 : (status[12] ? 13'd40 : 13'd40);
+assign VIDEO_ARY = ~|status[13:12] ? 13'd3 : (status[12] ? 13'd29 : 13'd28);
 
 assign CLK_VIDEO = clk_sys;
 assign VGA_SL = sl[1:0];
