@@ -60,8 +60,8 @@ module cmd_loader
     output logic [31:0] iterations          // Used for debugging via SignalTap
 ); 
 
-const bit [15:0] SYSTEM_ENTRY_LSB='h40DF;
-const bit [15:0] SYSTEM_ENTRY_MSB='h40E0;
+//const bit [15:0] SYSTEM_ENTRY_LSB='h40DF;
+//const bit [15:0] SYSTEM_ENTRY_MSB='h40E0;
 
 typedef enum bit [3:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH} loader_states;
 loader_states state;
