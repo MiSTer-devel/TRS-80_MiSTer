@@ -41,6 +41,7 @@ module floppy (
 	output 	     sector_data,  // valid sector data under head - nn
 	
 	output 	     ready,        // drive is ready, data can be read - nn - could be 1
+	output 	     HLD,        // Simulated Head loaded
 	output reg   index			// Used only in status register to report the index hole
 );
 
@@ -52,7 +53,7 @@ assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
 assign sector_data = (sec_state == SECTOR_STATE_DATA);
 
 // a standard DD floppy has a data rate of 250kBit/s and rotates at 300RPM
-localparam RATESD = 20'd125000;
+localparam RATESD = 20'd125000; 
 localparam RATEDD = 20'd250000;
 localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
@@ -61,7 +62,7 @@ localparam SPINUP = 10'd10;       // drive spins up in up to 800ms
 localparam SPINDOWN = 12'd10;     // GUESSED: drive spins down in 300ms
 localparam INDEX_PULSE_LEN = 5'd20; // fd1036 data sheet says 1~8ms - 6ms
 localparam SECTOR_HDR_LEN = 4'd6;  // GUESSED: Sector header is 6 bytes
-localparam TRACKS = 8'd85;         // max allowed track
+localparam TRACKS = 8'd240;         // max allowed track 
 
 // TRS-80 specific values
 //localparam SECTOR_LEN = 11'd1024 // Default sector size is 1024 on Archie
@@ -75,6 +76,7 @@ localparam BPTDD = RATEDD*60/(8*RPM);
 localparam BPTHD = RATEHD*60/(8*RPM);
 
 // report disk ready if it spins at full speed and head is not moving
+assign HLD = select && (rate == (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD)) ;
 assign ready = select && (rate == (density==2'b00 ? RATESD : density==2'b01 ? RATEDD : RATEHD)) && (step_busy == 0);
 
 // ================================================================
@@ -279,6 +281,7 @@ always @(posedge clk) begin
 	data_clk_en <= 0;
 	if(clk_cnt + rate*clk_div > (SYS_CLK)/2) begin
 		clk_cnt <= clk_cnt - ((SYS_CLK)/2 - rate*clk_div);
+		// clk_cnt <= 31'd0 ;
 		data_clk <= !data_clk;
 		if (~data_clk) data_clk_en <= 1;
 	end else
