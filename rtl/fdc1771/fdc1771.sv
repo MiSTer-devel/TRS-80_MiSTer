@@ -880,51 +880,52 @@ always @(posedge clk_sys) begin
 	if(fd_dclk_en) begin
 		if(data_transfer_cnt != 0) begin 
 		   if (drq) begin
-				if (drq_count == 8'b11111111) begin
+				if (drq_count == 8'd20) begin
 					data_lost <= 1'b1 ;
 					drq_set <= 1'b1;
 				end else begin
 					  drq_count <= drq_count + 8'd1 ;
 					  if (drq_count > drq_count_debug) drq_count_debug <= drq_count ;
 				end
-			end else if(data_transfer_cnt != 1) begin
-				data_lost <= 1'b0;
-				if (drq) data_lost <= 1'b1;
-				drq_set <= 1'b1;
+			end else begin
+				if(data_transfer_cnt != 1) begin
+					data_lost <= 1'b0;
+					// if (drq) data_lost <= 1'b1;      // this can never happen here
+					drq_set <= 1'b1;
 
-				// read_address
-				if(cmd[7:4] == 4'b1100) begin
-					case(data_transfer_cnt)
-						7: data_out <= fd_track;
-						6: data_out <= 8'b00000000;
-						5: data_out <= fd_sector;
-						4: data_out <= sector_size_code; // TODO: sec size 0=128, 1=256, 2=512, 3=1024
-						3: data_out <= 8'ha5;
-						2: data_out <= 8'h5a;
-					endcase // case (data_read_cnt)
-				end
+					// read_address
+					if(cmd[7:4] == 4'b1100) begin
+						case(data_transfer_cnt)
+							7: data_out <= fd_track;
+							6: data_out <= 8'b00000000;
+							5: data_out <= fd_sector;
+							4: data_out <= sector_size_code; // TODO: sec size 0=128, 1=256, 2=512, 3=1024
+							3: data_out <= 8'ha5;
+							2: data_out <= 8'h5a;
+						endcase // case (data_read_cnt)
+					end
 
-				// read sector
-				if(cmd[7:5] == 3'b100) begin
-					if(fifo_cpuptr != sector_size) begin
-						data_out <= fifo_q;
-						fifo_cpuptr <= fifo_cpuptr + 1'd1;
+					// read sector
+					if(cmd[7:5] == 3'b100) begin
+						if(fifo_cpuptr != sector_size) begin
+							data_out <= fifo_q;
+							fifo_cpuptr <= fifo_cpuptr + 1'd1;
+						end
 					end
 				end
+				// count down and stop after last byte
+				data_transfer_cnt <= data_transfer_cnt - 11'd1;
+				if(data_transfer_cnt == 1) data_transfer_done <= 1'b1;
 			end
-
-			// count down and stop after last byte
-			data_transfer_cnt <= data_transfer_cnt - 11'd1;
-			if(data_transfer_cnt == 1)
-				data_transfer_done <= 1'b1;
 		end
 	end
 end
 
 // Different logic for fdc1771 status register
-logic s6, s5, s4, s2, s1, s0;
+logic s7, s6, s5, s4, s2, s1, s0;
 always_comb
 begin
+	s7 = !fd_ready | notready_wait ;
 	if(!floppy_present) begin		// Pull-ups if no disk attached
 		s6 = 1'b0;
 		s5 = 1'b1;
@@ -956,7 +957,10 @@ begin
 		else begin //cmd_type_1,4 or unknown state
 			s6 = floppy_write_protected;
 //			s5 = fd_ready; 	// LDOS fix
-			s5 = fd_HLD;   	// LDOS fix
+// 	Symptom : command 'BOOT' in a DO JCL file gets to non-disk "READY?" state reboot, because @ addr X'696' the status @37EC is 
+//    checked to be 0xFF or 0x00 (A+1<2 : add a,1;cp A,2;jp c,0x75), and it pretty well could happend in normal operation
+//    So we need to make sure the status never gets to be all zeroes. I am just surprised that it is suffisant to do so in cmd_type_1 state
+			s5 = fd_HLD || ~(s1||s2||s4||s6||s7);   	// LDOS fix and more ROM BOOT fix if jmp 0 done from an non-reset state.
 			s2 = fd_track0;
 			s1 = ~fd_index;
 		end
@@ -969,7 +973,7 @@ end
 //wire s5 = cmd_type_1 ? ~&floppy_drive : sector_read ? (track==8'd17 ? 1'b1 : 1'b0) : motor_on;
 //wire s4 = sector_not_found;
 // the status byte
-wire [7:0] status = { !fd_ready | notready_wait, 
+wire [7:0] status = { s7, 
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
