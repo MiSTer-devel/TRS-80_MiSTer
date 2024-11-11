@@ -37,7 +37,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
- * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images
+ * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images (disabled for now)
  * Even though sector write operations are supported, formatting of disks is not.
  * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
 
