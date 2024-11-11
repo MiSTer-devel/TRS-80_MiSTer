@@ -53,14 +53,18 @@ module keyboard
 	input       [7:0] addr,			// bottom 7 address lines from CPU for memory-mapped access
 	output      [7:0] key_data,	// data lines returned from scanning
 	
-	input					kblayout,	// 0 = TRS-80 keyboard arrangement; 1 = PS/2 key assignment
+	input					kblayout		// 0 = TRS-80 keyboard arrangement; 1 = PS/2 key assignment
 
-	output reg [11:1] Fn = 0,
-	output reg  [2:0] modif = 0
+	// output reg [11:1] Fn = 0,
+	// output reg  [2:0] modif = 0
 );
 
 reg  [7:0] keys[7:0];
-reg        press_btn = 0;
+reg	[15:0] vkeys_ps2; // virtual key states from ps2, only for some keys, used to retain that the conditions for a key translation
+								// were met during the down scan code, and then it should be reset during the up scan code of the same key
+								// it is also used to retain the fact that the simulated shift key should be kept to avoid generating wrong keys
+reg  state_column = 0 ;
+reg   press_btn = 0;
 reg  [7:0] code;
 reg		  shiftstate = 0;
 
@@ -89,9 +93,14 @@ always @(posedge clk_sys) begin
 		keys[5] <= 8'b00000000;
 		keys[6] <= 8'b00000000;
 		keys[7] <= 8'b00000000;
+		vkeys_ps2 <= 16'd0;
+		state_column <= 0 ;
 	end
 
+
 	if(input_strobe) begin
+
+	/* not used yet
 		case(code)
 			8'h59: modif[0]<= press_btn; // right shift
 			8'h11: modif[1]<= press_btn; // alt
@@ -108,6 +117,7 @@ always @(posedge clk_sys) begin
 			8'h09: Fn[10]<= press_btn; // F10
 			8'h78: Fn[11]<= press_btn; // F11
 		endcase
+	*/
 
 		case(code)
 
@@ -168,33 +178,43 @@ always @(posedge clk_sys) begin
 			8'h74 : keys[6][6] <= press_btn; // RT ARROW
 			8'h29 : keys[6][7] <= press_btn; // SPACE
 			
-			
+			// Left and right shift keys are combined
 			8'h12 : begin
-						keys[7][0] <= press_btn; // Left shift
-						shiftstate <= press_btn;
+						keys[7][0] <= |(vkeys_ps2 & 16'b1111111111111110) || press_btn; // Left shift
+						vkeys_ps2[0] <= press_btn; 
+						shiftstate <= vkeys_ps2[1] || press_btn;
 					end
 
 			8'h59 : begin
-						keys[7][0] <= press_btn; // Right shift
-						shiftstate <= press_btn;
+						keys[7][0] <= |(vkeys_ps2 & 16'b1111111111111101) || press_btn; // Right shift
+						vkeys_ps2[1] <= press_btn; 
+						shiftstate <= vkeys_ps2[0] || press_btn;
 					end
 			
-//			8'h14 : keys[7][1] <= press_btn; // CTRL (Symbol Shift)
+			// 8'h14 : keys[7][2] <= press_btn; // CTRL (Symbol Shift)
+			// The very impractical Model I CTRL key is shift-DN ARROW, it can be happily replaced by the PS2 Ctrl key in both Keyb modes
+			// We should do the same combining logic than the shift keys, but if the latter may pretty well be used for games, CTRL is not.
+			8'h14 : begin
+						vkeys_ps2[2] <= press_btn;
+						keys[6][4] <= press_btn;    // CTRL = shift-DN ARROW
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111111111111011); // reset only if no  other one wants shift forced
+					end
 
-			
 			// Numpad new keys:
 			
 			8'h7b : keys[5][5] <= press_btn; // keypad -
 			8'h6c : keys[6][1] <= press_btn; // KYPD-7 (PC) -> CLEAR (TRS)
 
 			8'h7c : begin
+						vkeys_ps2[3] <= press_btn;			
 						keys[5][2] <= press_btn; // * (shifted)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111111111110111);
 					end
 
 			8'h79 : begin
+						vkeys_ps2[4] <= press_btn;			
 						keys[5][3] <= press_btn; // + (shifted)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111111111101111);
 					end
 
 
@@ -202,22 +222,25 @@ always @(posedge clk_sys) begin
 			// For the next group of keys, results depend on the keyboard mode (TRS or PC)
 			//////////////////////////////
 
+			
 			8'h54 : 															// [ (PC backslash)
 					if (kblayout == 0) begin
 						keys[0][0] <= press_btn;						// -> @ TRS			(TRS layout)
 					end														// -> no mapping	(PC layout)
 
-			8'h45 :															// 0
-					if ((kblayout == 1) && (shiftstate == 1)) begin
+			8'h45 :															// 0			
+					if (vkeys_ps2[5] || ((kblayout == 1) && (shiftstate == 1) && (press_btn == 1) )) begin
+						vkeys_ps2[5] <= press_btn;
 						keys[5][1] <= press_btn;						// PC ')' -> 9 + shift (TRS)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111111111011111); // reset only if no  other one wants shift forced
 					end
 					else begin
 						keys[4][0] <= press_btn;						// 0
 					end
 		
 			8'h1e :															// 2
-					if ((kblayout == 1) && (shiftstate == 1)) begin
+					if (vkeys_ps2[6] || ((kblayout == 1) && (shiftstate == 1) && (press_btn == 1) )) begin
+						vkeys_ps2[6] <= press_btn;					
 						keys[0][0] <= press_btn;						// PC '@" -> @ (TRS)
 					end
 					else begin
@@ -226,32 +249,36 @@ always @(posedge clk_sys) begin
 			
 			
 			8'h36 :															// 6
-					if ((kblayout == 0) || (shiftstate == 0)) begin
+					if (vkeys_ps2[7] || ((kblayout == 0) || (shiftstate == 0) && (press_btn == 1) )) begin
+						vkeys_ps2[7] <= press_btn;					
 						keys[4][6] <= press_btn;						// 6 (no mapping for '^' from PC)
 					end
 
 			8'h3d :															// 7
-					if ((kblayout == 1) && (shiftstate == 1)) begin
+					if (vkeys_ps2[8] || ((kblayout == 1) && (shiftstate == 1) && (press_btn == 1) )) begin
+						vkeys_ps2[8] <= press_btn;										
 						keys[4][6] <= press_btn;						// PC '&' -> '6' + shift (TRS)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111111011111111);
 					end
 					else begin
 						keys[4][7] <= press_btn;						// 7
 					end
 			
 			8'h3e :															// 8
-					if ((kblayout == 1) && (shiftstate == 1)) begin
+					if (vkeys_ps2[9] || ((kblayout == 1) && (shiftstate == 1) && (press_btn == 1) )) begin
+						vkeys_ps2[9] <= press_btn;										
 						keys[5][2] <= press_btn;						// PC '*' -> ':' + shift (TRS)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111110111111111);
 					end
 					else begin
 						keys[5][0] <= press_btn;						// 8
 					end
 			
 			8'h46 :															// 9
-					if ((kblayout == 1) && (shiftstate == 1)) begin
+					if (vkeys_ps2[10] || ((kblayout == 1) && (shiftstate == 1) && (press_btn == 1) )) begin
+						vkeys_ps2[10] <= press_btn;										
 						keys[5][0] <= press_btn;						// PC '(' -> '8' + shift (TRS)
-						keys[7][0] <= press_btn;
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1111101111111111);
 					end
 					else begin
 						keys[5][1] <= press_btn;						// 9
@@ -262,14 +289,21 @@ always @(posedge clk_sys) begin
 					if (kblayout == 0) begin
 						keys[5][2] <= press_btn;						// :* (TRS)
 					end
-					else if (shiftstate == 0) begin
+					else if ((shiftstate == 0) || (press_btn == 0) )begin
 						keys[5][5] <= press_btn;						// - (minus)
 					end
 
 			8'h4c :															// ;:
-					if ((kblayout == 1) && (shiftstate == 1)) begin
-						keys[5][2] <= press_btn;						// ':' (not shifted)  (TRS)
-						keys[7][0] <= ~press_btn;
+					// if there is another key mapping that requires shift locked-in, we cannot force shift low, so skip it
+					// we cannot use vkeys_ps2 here, since this would FORCE shift, and we want the opposite
+					if (state_column || ( ((kblayout == 1) && (shiftstate == 1)) && (press_btn == 1)  )) begin
+					   if ( (~|(vkeys_ps2 & 16'b1111111111111100)) || (press_btn == 0) ) begin
+							keys[5][2] <= press_btn;						// ':' (not shifted)  (TRS)
+							if (press_btn == 1)
+							   keys[7][0] <= 1'b0 ; else 			 // upon release, shiftstate==1, so should be set to 1 
+								keys[7][0] <= |vkeys_ps2 ;
+						end
+						state_column <= press_btn;										
 					end
 					else begin
 						keys[5][3] <= press_btn;						// - (minus)
@@ -277,14 +311,15 @@ always @(posedge clk_sys) begin
 
 			8'h55 :															// = +
 					if (kblayout == 1) begin
-						if (shiftstate == 0) begin						// if '=' on PC keyboard
-							keys[5][5] <= press_btn;					// '-' + shift (TRS)
-							keys[7][0] <= press_btn;
-						end
-						else begin											// if '+' on PC keyboard
+						if (vkeys_ps2[13] || (shiftstate == 1)) begin						// if '=' on PC keyboard
 							keys[5][3] <= press_btn;					// ';' + shift (TRS)
-							keys[7][0] <= press_btn;
+							vkeys_ps2[13] <= press_btn;										
 						end
+						if (vkeys_ps2[12] || (shiftstate == 0)) begin											// if '+' on PC keyboard
+							keys[5][5] <= press_btn;					// '-' + shift (TRS)
+							vkeys_ps2[12] <= press_btn;										
+						end
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b1100111111111111) ;
 					end
 					else begin
 						keys[5][5] <= press_btn;						// =
@@ -292,14 +327,16 @@ always @(posedge clk_sys) begin
 
 			8'h52 :															// ' "
 					if (kblayout == 1) begin
-						if (shiftstate == 1) begin						// if (double-quote) on PC keyboard
+						if (vkeys_ps2[14] || (shiftstate == 1)) begin						// if (double-quote) on PC keyboard
+							vkeys_ps2[14] <= press_btn;										
 							keys[4][2] <= press_btn;					// '2' + shift (TRS)
-							keys[7][0] <= press_btn;
 						end
-						else begin											// if (apostrophe) on PC keyboard
+						if (vkeys_ps2[15] || (shiftstate == 0)) begin						// if (double-quote) on PC keyboard
+																				// if (apostrophe) on PC keyboard
+							vkeys_ps2[15] <= press_btn;										
 							keys[4][7] <= press_btn;					// '7' + shift (TRS)
-							keys[7][0] <= press_btn;
 						end
+						keys[7][0] <= press_btn || |(vkeys_ps2 & 16'b0011111111111111) ;
 					end														// otherwise no mapping (TRS)
 
 			default: ;

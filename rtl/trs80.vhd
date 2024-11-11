@@ -157,10 +157,10 @@ port (
 	ps2_key	: in std_logic_vector(10 downto 0);
 	addr		: in std_logic_vector(7 downto 0);
 	key_data	: out std_logic_vector(7 downto 0);
-	kblayout	: in std_logic;
-
-	Fn			: out std_logic_vector(11 downto 1);
-	modif		: out std_logic_vector(2 downto 0)
+	kblayout	: in std_logic
+	
+--	Fn			: out std_logic_vector(11 downto 1);
+--	modif		: out std_logic_vector(2 downto 0)
 );
 end component;
 
