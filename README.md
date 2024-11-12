@@ -22,9 +22,9 @@ The TRS-80 with Disk Drives attached will boot to a screen of '@' symbols and wi
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
 
 ### To load files from DSK images:
-There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 250 tracks, all tracks must currently hold 10 x 256 byte sectors.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
+There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 240 tracks, all tracks must currently hold 10 x 256 byte sectors.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
 
-The Disk emulation supports reading and writing to JV1 formatted disks, but disks cannot be formatted in the core because there is no Write Track support for JV1 images.  There are many different DOS versions for the TRS-80 with popular ones including TRSDOS, NEWDOS/80 and MULTIDOS.  For beginners it is recommended you use TRSDOS which is the original DOS produced by Radio Shack.  Instructions for using TRSDOS can be found in the following Wikipedia article: https://en.wikipedia.org/wiki/TRSDOS
+The Disk emulation supports reading and writing to JV1 formatted disks, but disks cannot be formatted in the core because there is no Write Track support for JV1 images.  There are many different DOS versions for the TRS-80 with popular ones including TRSDOS, NEWDOS/80, LDOS and MULTIDOS.  For beginners it is recommended you use TRSDOS which is the original DOS produced by Radio Shack.  Instructions for using TRSDOS can be found in the following Wikipedia article: https://en.wikipedia.org/wiki/TRSDOS
 
 ## Features:
  * TRS-80 Model I with 48KB installed
@@ -33,23 +33,27 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
+ * Ctrl Key simulates shift-DownArrow
  
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
- * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images
+ * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images (disabled for now)
  * Even though sector write operations are supported, formatting of disks is not.
+ * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
 
 ## Technical:
 Debug status line
  * The Debug Status line will only be visible in Partial or Full overscan modes
    * For monitoring Floppy Disk Controller (FDC)
-   * Usess the following format: Ddddd,Ccc,Ttt,Sss,dnn,sSS \* where:
+   * Usess the following format: Ddddd,Ccc,Ttt,Sss,dnn,sSS,Xdxx \* where:
      * dddd - Drive select latch (1-4).  Only 2 drives are currently supported
      * cc   - FDC Command Register
      * tt   - FDC Track Register
      * ss   - FDC Sector Register
      * nn   - FDC Data Register
      * SS   - FDC Status Register
+     * dxx  - d:  8=err data lost 4=err RNF 2=ctrl type 1=track mismatch
+            - xx: max number of data lost by CPU (but recovered)
      * \*   - RTC Second Timer
 
 
@@ -72,5 +76,5 @@ Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
 Special memory mapped ports have been added as follows:
 
 * TRS-80 DD Interface - Memory mapped interface
-    * 0x37ec = 0x80 - Enable Double Density Mode
+    * 0x37ec = 0x80 - Enable Double Density Mode  (disabled for now)
     * 0x37ec = 0xa0 - Disable Double Density Mode
