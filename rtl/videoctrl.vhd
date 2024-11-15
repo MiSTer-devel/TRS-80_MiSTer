@@ -374,16 +374,16 @@ x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"3f",x"00",x"
 --[PATCH_END]
 );
 
-signal clkdiv : std_logic_vector(1 downto 0);
+signal clkdiv  : std_logic_vector(1 downto 0);
 
-signal hctr : std_logic_vector(9 downto 0);
-signal vctr : std_logic_vector(8 downto 0);
-signal vpos : std_logic_vector(3 downto 0); -- line pos in a chr 0..11
-signal hpos : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
+signal hctr    : std_logic_vector(9 downto 0);
+signal vctr    : std_logic_vector(8 downto 0);
+signal vpos    : std_logic_vector(3 downto 0); -- line pos in a chr 0..11
+signal hpos    : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
 
-signal ce   : std_logic;
+signal ce      : std_logic;
 
-signal vdebug : std_logic;
+signal vdebug  : std_logic;
 
 signal hact,vact : std_logic;			-- '1' if inside active display area
 signal hdisp,vdisp : std_logic;		-- '1' if inside CRT scanning area (includes borders)
@@ -392,7 +392,7 @@ signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay 
 signal border : std_logic_vector(3 downto 0) := "0000";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
-signal dashbrd : std_logic_vector(3 downto 0) := "1011";
+signal dashbrd : std_logic_vector(3 downto 0) := "1011";  -- debug yellow color
 
 signal  vid_addr : std_logic_vector(9 downto 0);
 
@@ -572,8 +572,8 @@ begin
 		end if;
 	end if;	 	 
 end process; 
-
-hact <= '1' when hctr>=hstart and hctr<hstart+hsize else '0';
+  
+hact <= '1' when hctr>=hstart and hctr<hstart+hsize else '0'; -- if widemode, allow for the last half-character
 vact <= '1' when vctr>=vstart and vctr<vstart+vsize else '0';
 vdebug <= '1' when vctr>=vstart-12 and vctr<vstart and debug_enable='1' else '0';
 
@@ -605,7 +605,7 @@ begin
 				if hpos=5 then
 					hpos <= "000";
 					vaHoriz <= vaHoriz+1;
-					if (widemode = '0' or vaHoriz(0) = '1') then
+					if (widemode = '0' or vaHoriz(0) = '0' or vdebug='1') then	-- no wide mode in debug mode
 						shiftReg <= chrGrap;
 					else
 						shiftReg <= shiftReg(6 downto 0) & '0';
@@ -627,7 +627,7 @@ begin
 					vaVert<= "0000";
 					vpos <= "0000";
 
-				elsif (vact='1' or vdebug='1') and hctr=hstart+hsize+2 then
+				elsif (vact='1' or vdebug='1') and hctr=hstart+hsize+2 then  
 					-- end of a scanline
 					if vpos=11 then
 						vpos <= "0000";
