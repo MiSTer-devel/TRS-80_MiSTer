@@ -52,16 +52,15 @@ Debug status line
      * ss   - FDC Sector Register
      * nn   - FDC Data Register
      * SS   - FDC Status Register
-     * dxx  - d:  8=err data lost 4=err RNF 2=ctrl type 1=track mismatch
-            - xx: max number of data lost by CPU (but recovered)
+     * dxx  - d:  8=err data lost 4=err RNF 2=ctrl type 1=track mismatch; xx: max number of data lost by CPU (but recovered)
      * \*   - RTC Second Timer
 
 
 Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
  * VIDEO:
-   * OUT 0, n (where n=(0-7)) -> change foreground color
-   * OUT 1, n (where n=(0-7)) -> change bacgronund color
-   * OUT 2, n (where n=(0-7)) -> change overscan color
+   * OUT 0, n (where n=(0-15)) -> change foreground color
+   * OUT 1, n (where n=(0-15)) -> change background color
+   * OUT 2, n (where n=(0-15)) -> change overscan color
 
  * Memory-mapped cassette:
    * OUT 6, n (where n=(0-255)) -> set address bits 23-16 of virtual memory pointer
