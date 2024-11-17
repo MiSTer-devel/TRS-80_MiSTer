@@ -205,7 +205,7 @@ end
 always @(posedge clk_sys) begin
 	reg [3:0] img_mountedD;
 
-	img_mountedD <= img_mounted;
+	img_mountedD <= img_mounted;	
 	if (~img_mountedD[0] && img_mounted[0]) begin
 		floppy_ready[0] <= |img_size;
 		mounted_size[0] <= img_size[31:9] ;

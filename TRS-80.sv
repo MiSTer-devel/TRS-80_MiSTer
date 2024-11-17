@@ -207,6 +207,7 @@ localparam CONF_STR = {
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
 	"O89,Clockspeed (MHz),1.78(1x),3.56(2x),5.34(3x),21.29(12x);",
 	"-;",
+	"RG,Hard reset (Erase memory);",
 	"R0,Reset;",
 	"J,Fire;",
 	"V,v",`BUILD_DATE
@@ -302,6 +303,7 @@ cmd_loader cmd_loader
 (
 	.clock(clk_sys),
 	.reset(reset),
+	.erase_mem(status[16]),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),

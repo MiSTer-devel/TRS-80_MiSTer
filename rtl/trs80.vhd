@@ -384,7 +384,8 @@ port map
 	dir_set => DIRSet
 );
 
-led <= taperead;
+-- led <= taperead;
+LED <= fdc_motor_on ;
 
 -- Generate 25ms clock for RTC in expansion interface
 process(clk42m)
