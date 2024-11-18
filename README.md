@@ -34,12 +34,25 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
  * Ctrl Key simulates shift-DownArrow
+ * Handles Soft Reset ans Hard Reset (erasing memory)
  
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
  * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images (disabled for now)
  * Even though sector write operations are supported, formatting of disks is not.
  * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
+
+## S80 improved keyin routine
+ The included ROM contains Dick Smith System80 improved keyin routine at /12288; load with "SYSTEM" the "/12288" at the \*? prompt. Refer to the System80 manual for details about this.
+
+## Hidden debugger in the ROM 
+ * The debugger can be loaded with "SYSTEM" then "/12710" at the prompt; it is very primitive and cannot trace, step or break, it allows only to examine memory and registers, then jump somewhere.
+ * commands are :
+   * R : modify registers (next with X)
+   * D : dump memory (up and down arrow to navigate, X to exit)
+   * B : back to basic
+   * M : modify memory
+   * G : to jump to an address
 
 ## Technical:
 Debug status line

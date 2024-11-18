@@ -85,13 +85,13 @@ Port (
 	execute_addr	: in std_logic_vector(15 downto 0);
 	execute_enable	: in std_logic;
 
-	img_mounted   	: in std_logic_vector(1 downto 0);
-	img_readonly   	: in std_logic_vector(1 downto 0);
+	img_mounted   	: in std_logic_vector(3 downto 0);
+	img_readonly   	: in std_logic_vector(3 downto 0);
 	img_size  	: in std_logic_vector(31 downto 0); -- in bytes
 
 	sd_lba	 	: out std_logic_vector(31 downto 0);
-	sd_rd	   	: out std_logic_vector(1 downto 0);
-	sd_wr	   	: out std_logic_vector(1 downto 0);
+	sd_rd	   	: out std_logic_vector(3 downto 0);
+	sd_wr	   	: out std_logic_vector(3 downto 0);
 	sd_ack	    	: in std_logic;
 	sd_buff_addr   	: in std_logic_vector(8 downto 0);
 	sd_buff_dout   	: in std_logic_vector(7 downto 0);
@@ -226,13 +226,13 @@ component fdc1771 is
 			cpu_din	    	: in std_logic_vector(7 downto 0);
 			cpu_dout    	: out std_logic_vector(7 downto 0);
 			
-			img_mounted   	: in std_logic_vector(1 downto 0);
-			img_wp		   	: in std_logic_vector(1 downto 0);
+			img_mounted   	: in std_logic_vector(3 downto 0);
+			img_wp		   	: in std_logic_vector(3 downto 0);
 			img_size	   	: in std_logic_vector(31 downto 0); -- in bytes
 
 			sd_lba 	  		: out std_logic_vector(31 downto 0);
-			sd_rd		   	: out std_logic_vector(1 downto 0);
-			sd_wr		   	: out std_logic_vector(1 downto 0);
+			sd_rd		   	: out std_logic_vector(3 downto 0);
+			sd_wr		   	: out std_logic_vector(3 downto 0);
 			sd_ack	    	: in std_logic;
 			sd_buff_addr   	: in std_logic_vector(8 downto 0);
 			sd_dout		   	: in std_logic_vector(7 downto 0);
@@ -344,7 +344,7 @@ signal fdc_rd : std_logic;
 signal fdc_wr : std_logic;
 signal fdc_din : std_logic_vector(7 downto 0);
 signal fdc_dout : std_logic_vector(7 downto 0);
-signal fdc_drive : std_logic_vector(1 downto 0);
+signal fdc_drive : std_logic_vector(3 downto 0);
 signal fdc_strobe : std_logic := '0';
 signal fdc_rd_strobe : std_logic := '0';
 signal fdc_wr_strobe : std_logic := '0';
@@ -384,7 +384,8 @@ port map
 	dir_set => DIRSet
 );
 
-led <= taperead;
+-- led <= taperead;
+LED <= fdc_motor_on ;
 
 -- Generate 25ms clock for RTC in expansion interface
 process(clk42m)
