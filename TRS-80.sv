@@ -169,7 +169,7 @@ assign HDMI_FREEZE = 0;
 assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
 
-assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+// assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign USER_OUT = '1;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
@@ -187,12 +187,13 @@ assign LED_USER  = ioctl_download;
 
 `include "build_id.v"
 localparam CONF_STR = {
-	"TRS-80;;",
+	"TRS-80;UART19200:9600:4800:2400:1200:300:110;",
 	"S0,DSKJV1,Mount Disk 0:;",
  	"S1,DSKJV1,Mount Disk 1:;",
  	"S2,DSKJV1,Mount Disk 2:;",
  	"S3,DSKJV1,Mount Disk 3:;",
 	"-;",
+//	"F3,*,Upload File(s);",
 	"F2,CMD,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
@@ -207,7 +208,7 @@ localparam CONF_STR = {
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
 	"O89,Clockspeed (MHz),1.78(1x),3.56(2x),5.34(3x),21.29(12x);",
 	"-;",
-	"RG,Hard reset (Erase memory);",
+	"RG,Erase memory and reset;",
 	"R0,Reset;",
 	"J,Fire;",
 	"V,v",`BUILD_DATE
@@ -249,6 +250,8 @@ wire [10:0] ps2_key;
 wire [21:0] gamma_bus;
 
 wire [15:0] joystick_0, joystick_1;
+wire [31:0] uart_speed;
+wire [7:0] uart_mode;
 
 hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 (
@@ -283,7 +286,10 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),
-	.img_size(img_size)
+	.img_size(img_size),
+	
+	 .uart_mode(uart_mode),
+	 .uart_speed(uart_speed)
 );
 
 wire rom_download = ioctl_download && ioctl_index==0;
@@ -396,8 +402,17 @@ trs80 trs80
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
 	.sd_buff_din(sd_buff_din_0),
-	.sd_dout_strobe(sd_buff_wr)
+	.sd_dout_strobe(sd_buff_wr),
 
+	.UART_TXD(UART_TXD),
+	.UART_RXD(UART_RXD),
+	.UART_RTS(UART_RTS),
+	.UART_CTS(UART_CTS),
+	.UART_DTR(UART_DTR),
+	.UART_DSR(UART_DSR),
+	
+	.uart_mode(uart_mode),   // 0=None, 1=PPP or Modem, 2=Console, 3=MIDI 
+	.uart_speed(uart_speed)
 );
 
 

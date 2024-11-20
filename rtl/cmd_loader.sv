@@ -97,12 +97,12 @@ begin
 
 		loader_wr <= '0;
 		ioctl_wait <= '0;
-		execute_enable <= 0;
 
-        iterations <= iterations + 32'd1;   // Used for debugging
+      iterations <= iterations + 32'd1;   // Used for debugging
 
 		case(state)
 			IDLE: begin 		// No transfer occurring
+				execute_enable <= 0;
 				if(~old_download && ioctl_download && ioctl_index==INDEX && ioctl_addr == '0) begin
 					loader_download <= 1;
 					state <= GET_TYPE;
@@ -229,12 +229,35 @@ begin
 					state <= DO_ZERO ;
 				end
 				DO_ZERO: begin
-					if (&loader_addr == 1'b1) begin
-						state <= FINISH ;
-						execute_addr <= 16'd0 ; // reboot
-						execute_enable <= 1;	
-					end else begin	
-						loader_data <= 8'd0 ;
+					if (loader_addr == 16'h0fffd) begin  // allow a few cycles for the CPU to get the REGset signal
+							execute_addr <= 16'hffe1 ; // reboot, call CLS, and ret to 0000
+							execute_enable <= 1;
+					end
+					if (loader_addr == 16'h0ffff) begin
+					   if (~erase_mem) begin  // end of pulse ?
+							state <= FINISH ;
+						end	
+					end else begin
+				      if (loader_addr[15:4] == 12'h0ffe) // insert clear routine at ffe1 (next addr)
+							loader_data <= 	 // f3 21 00 3c 11 01 3c 3e  20 77 01 ff 03 ed b0 c3 00 00
+								(loader_addr[3:0] == 4'h00) ? 8'hf3 : // di
+								(loader_addr[3:0] == 4'h01) ? 8'h21 : // ld hl,3c00h
+								(loader_addr[3:0] == 4'h02) ? 8'h00 : 
+								(loader_addr[3:0] == 4'h03) ? 8'h3c : 
+								(loader_addr[3:0] == 4'h04) ? 8'h11 : // ld de,3c01h
+								(loader_addr[3:0] == 4'h05) ? 8'h01 : 
+								(loader_addr[3:0] == 4'h06) ? 8'h3c : 
+								(loader_addr[3:0] == 4'h07) ? 8'h3e : // ld a,20h
+								(loader_addr[3:0] == 4'h08) ? 8'h20 : 
+								(loader_addr[3:0] == 4'h09) ? 8'h77 : // ld (hl),a
+								(loader_addr[3:0] == 4'h0a) ? 8'h01 : // ld bc,03ffh
+								(loader_addr[3:0] == 4'h0b) ? 8'hff : 
+								(loader_addr[3:0] == 4'h0c) ? 8'h03 : 
+								(loader_addr[3:0] == 4'h0d) ? 8'hed : // ldir
+								(loader_addr[3:0] == 4'h0e) ? 8'hb0 : 
+								(loader_addr[3:0] == 4'h0f) ? 8'hc3 : 8'd0 ; // jp 0000h	
+							else 
+								loader_data <= 8'd0 ;
                   loader_wr <= 1;
 						loader_addr <= loader_addr + 16'd1 ;
 					end

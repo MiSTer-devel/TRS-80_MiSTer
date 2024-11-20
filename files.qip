@@ -2,6 +2,7 @@ set_global_assignment -name QIP_FILE rtl/T80/T80.qip
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/keyboard.sv
 set_global_assignment -name VHDL_FILE rtl/videoctrl.vhd
 set_global_assignment -name VHDL_FILE rtl/trs80.vhd
+set_global_assignment -name VHDL_FILE rtl/micro_rs232.vhd
 set_global_assignment -name VERILOG_FILE rtl/dpram.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ym2149.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cmd_loader.sv
