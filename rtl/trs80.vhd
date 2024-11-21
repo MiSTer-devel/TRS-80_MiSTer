@@ -259,22 +259,11 @@ component fdc1771 is
 		);
 end component ;
 
-component m_rs232_gclk is
-port (
-	clk42m     : in  std_logic;  -- 42.578Mhz
-	reset      : in  std_logic;  
-	
-	speed		  : in  std_logic_vector (31 downto 0) ;
-	clk_rs16   : out std_logic ; -- RS232 clock *16
-	baud_sel   : out std_logic_vector(3 downto 0) 
-);
-end component ;
-
 component m_rs232_uart is
 port (
 	reset      : in  std_logic;
 	clk42m     : in  std_logic;  -- 42.578Mhz
-	clk_rs16   : in  STD_LOGIC;
+
    addr		  : in std_logic_vector(1 downto 0) ; -- address from CPU
 	cs_n		  : in  std_logic; -- chip select 0xE8
 	iow_n		  : in std_logic;  -- io write
@@ -282,9 +271,9 @@ port (
 	DO			  : out std_logic_vector(7 downto 0) ;
 	DI			  : in std_logic_vector(7 downto 0) ;
 	
-   baud_sel   : in std_logic_vector(3 downto 0);
 	uart_mode  : in std_logic_vector(7 downto 0);
-
+	speed		  : in  std_logic_vector (31 downto 0) ;
+	
  	UART_TXD   : out  std_logic;
 	UART_RXD   : in  std_logic;
 	UART_RTS   : out  std_logic;
@@ -1171,17 +1160,17 @@ port map
 (
 	reset  => reset,
 	clk42m =>  clk42m,   
-	clk_rs16  =>  clk_rs16, 
+
    addr	=>	 cpua(1 downto 0), 
 	cs_n	=>  rs232_cs,	  
 	iow_n	=> iow,	  
 	ior_n => ior,
 	DO	=> rs232_out,
 	DI	=>	cpudo,
-	
-   baud_sel   => baud_sel,
-	uart_mode  => uart_mode,
 
+	uart_mode  => uart_mode,
+	speed		=>  uart_speed,
+	
  	UART_TXD   => UART_TXD,
 	UART_RXD   => UART_RXD, 
 	UART_RTS   => UART_RTS,
@@ -1192,18 +1181,6 @@ port map
 	uart_debug => uart_debug
 ) ;
 
-
-rs232_clk: m_rs232_gclk
-port map
-(
-	
-	clk42m  =>  clk42m,
-	reset   =>  reset,  -- note : do not reset the clock by a read from 0E8h !
-	
-	speed		=>  uart_speed,
-	clk_rs16 =>  clk_rs16,
-	baud_sel =>  baud_sel
-) ;
 
 
 
