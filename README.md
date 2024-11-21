@@ -2,8 +2,6 @@
 ## Model I Support ##
 This is a port of [HT1080Z MiST core](https://github.com/mist-devel/ht1080z) by Jozsef Laszlo to the MiSTer
 
-**NOTE: This core was renamed from ht1080z to TRS-80.  If you are using the old core, be sure to rename the ht1080z directory to trs-80 on the MiSTer SD Card**
-
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
@@ -28,8 +26,9 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
 
 ## Features:
  * TRS-80 Model I with 48KB installed
- * Expansion interface with dual disk drives
+ * Expansion interface with quad disk drives
  * Real Time Clock (RTC)
+ * RS232-C Interface (IO ports $E8 to $EA)
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
@@ -43,7 +42,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
 
 ## S80 improved keyin routine
- The included ROM contains Dick Smith System80 improved keyin routine at /12288; load with "SYSTEM" the "/12288" at the \*? prompt. Refer to the System80 manual for details about this.
+ The included ROM contains Dick Smith System80 improved keyin routine at /12288; load with "SYSTEM" then "/12288" at the \*? prompt. Refer to the System80 manual for details about this.
 
 ## Hidden debugger in the ROM 
  * The debugger can be loaded with "SYSTEM" then "/12710" at the prompt; it is very primitive and cannot trace, step or break, it allows only to examine memory and registers, then jump somewhere.
@@ -84,7 +83,7 @@ Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
    * Note that cassette image is loaded at 0x010000, and no memory exists beyond 0x01ffff
 
  * Holmes Sprinter Interface
-   * OUT 254, n - Even number = Override Turbo.  Odd number = Enabe Turbo
+   * OUT 254, n - Even number = Override Turbo.  Odd number = Enable Turbo
 
 Special memory mapped ports have been added as follows:
 
