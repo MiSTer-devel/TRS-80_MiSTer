@@ -258,7 +258,7 @@ begin
 								(loader_addr[3:0] == 4'h0f) ? 8'hc3 : 8'd0 ; // jp 0000h	
 							else 
 								loader_data <= 8'd0 ;
-                  loader_wr <= 1;
+            loader_wr <= 1;
 						loader_addr <= loader_addr + 16'd1 ;
 					end
 				end
