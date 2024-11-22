@@ -33,7 +33,6 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
  * Ctrl Key simulates shift-DownArrow
- * Handles Soft Reset ans Hard Reset (erasing memory)
  
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported

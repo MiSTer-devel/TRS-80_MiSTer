@@ -34,7 +34,7 @@ entity m_rs232_uart is
 Port (
 	reset      : in  std_logic;
 	clk42m     : in  std_logic;  -- 42.578Mhz
-	clk_rs16   : in  STD_LOGIC;
+
    addr		  : in std_logic_vector(1 downto 0) ; -- address from CPU
 	cs_n		  : in  std_logic; -- chip select 0xE8
 	iow_n		  : in std_logic;  -- io write
@@ -42,9 +42,9 @@ Port (
 	DO			  : out std_logic_vector(7 downto 0) ;
 	DI			  : in std_logic_vector(7 downto 0) ;
 	
-   baud_sel   : in std_logic_vector(3 downto 0);
 	uart_mode  : in std_logic_vector(7 downto 0);
-
+	speed		  : in  std_logic_vector (31 downto 0) ;
+	
  	UART_TXD   : out  std_logic;
 	UART_RXD   : in  std_logic;
 	UART_RTS   : out  std_logic;
@@ -58,13 +58,22 @@ end m_rs232_uart;
 
 architecture Behavioral of m_rs232_uart is
    
-signal l_RESET : std_logic ;
+signal clk_rs16   : std_logic ; -- RS232 clock *16
+signal baud_sel   : std_logic_vector(3 downto 0) ;
+
+-- Clock generator; Mister App will be the driver for the speed, so this always fits.
+signal clk_counter : std_logic_vector(15 downto 0) ;
+signal clk_out : std_logic ;
+signal baud_div : std_logic_vector(15 downto 0) ;	
+
 signal UART_CD : std_logic ;
 signal UART_BRK : std_logic ;
 signal baud_sw : std_logic_vector(2 downto 0);
 
 signal UART_OVERRUN : std_logic ;
 signal UART_FRAME : std_logic ;
+signal UART_OVERRUN_C : std_logic ;
+
 
 signal TX_BUFFER : std_logic_vector(7 downto 0);
 signal TX_BUFFER_READY : std_logic ;
@@ -91,7 +100,7 @@ process(reset, clk42m)
 begin
  --  if (reset='1') or ( (addr = "01") and iow_n='0' and cs_n='0') then
    if (reset='1') then
-      UART_CD <= '0' ;
+      UART_CD <= '1' ;
 		UART_DTR <= '0' ;
 		UART_RTS <= '0' ;
 		UART_BRK <= '1' ;
@@ -104,7 +113,7 @@ begin
 			if RX_RESET_CLR='1' then RX_RESET<='0' ; end if ;
 			if RX_BUFFER_READY='0' then RX_BUFFER_READY_CLR<='0' ; end if;
 			if TX_BUFFER_READY='1' then TX_BUFFER_READY_SET<='0'; end if;
-			if uart_mode=0 then UART_CD<='0'; else UART_CD<='1' ; end if;
+			if uart_mode=0 then UART_CD<='1'; else UART_CD<='0' ; end if;
 			case baud_sel is 
 				when x"2" => baud_sw <= "000" ; -- 110
 				when x"3" => baud_sw <= "100" ; -- 300
@@ -140,14 +149,14 @@ begin
 	end if;
 end process;	
 
-process(reset, clk_rs16)
+process(clk42m, reset)
 begin
    if (reset='1') then
 		TX_BUFFER_READY <= '0' ;
 		TX_STATE <= "0000" ;
 		TX_STATE_CTR <= "0000" ;
 		UART_TXD <= '1' ;
-	elsif rising_edge(clk_rs16) then
+	elsif rising_edge(clk42m) and clk_rs16='1' then
 		if TX_BUFFER_READY_SET='1' then TX_BUFFER_READY<='1' ; end if ;
 		TX_STATE_CTR <= TX_STATE_CTR + 1 ; -- divide clock by 16
 		case TX_STATE is
@@ -172,19 +181,21 @@ begin
 end process;
 
 
-process(reset, clk_rs16)
+process(clk42m, reset)
 begin
    if (reset='1') then
 		RX_STATE <= "0000" ;
 		RX_STATE_CTR <= "0000" ;
 		RX_BUFFER_READY <= '0' ;
-		UART_OVERRUN <= '0' ;
+		UART_OVERRUN <= '0' ;	
+		UART_OVERRUN_C <= '0' ;
 		UART_FRAME <= '0' ;
 		RX_BUFFER <= "00000000" ;
 		RX_RESET_CLR <= '0' ;
-	elsif rising_edge(clk_rs16) then
+	elsif rising_edge(clk42m) and clk_rs16='1' then
 	   if RX_RESET='1' then
 			UART_OVERRUN <= '0' ;
+			UART_OVERRUN_C <= '0' ;
 			UART_FRAME <= '0' ;
 			RX_BUFFER_READY <= '0' ;
 			RX_BUFFER <= "00000000" ;
@@ -208,9 +219,12 @@ begin
 				RX_STATE <= "0010" ;
 			end if;
 		when "1010" => if RX_STATE_CTR=0 then
-				if UART_RXD='0' or UART_FRAME='1' then UART_FRAME<='1' ; end if; -- must be zero or its an error
-				if RX_BUFFER_READY='1' or UART_OVERRUN='1' then UART_OVERRUN<='1' ; end if; 
-				if (RX_BUFFER_READY='0') then
+				if RX_BUFFER_READY = '1' then 
+					UART_OVERRUN_C <= '1' ; 
+				else
+				   UART_FRAME <= not UART_RXD ;
+					UART_OVERRUN <= UART_OVERRUN_C ;
+					UART_OVERRUN_C <= '0' ;
 					RX_BUFFER <= RX_SHIFT ;
 					RX_BUFFER_READY <= '1' ;
 				end if;
@@ -224,39 +238,9 @@ begin
 	end if;
 end process;	
 
-end Behavioral;
 
--- Micro_RS232 for the MiSTer TRS-80 core
--- theflynn49 11/2024
 -- 
 -- Clock generator; Mister App will be the driver for the speed, so this always fits.
-	
-library IEEE;
-use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.STD_LOGIC_ARITH.ALL;
-use IEEE.STD_LOGIC_UNSIGNED.ALL;
-use IEEE.NUMERIC_STD.ALL;
-	
-	
-entity m_rs232_gclk is
-Port (
-	clk42m     : in  std_logic;  -- 42.578Mhz
-	reset      : in  std_logic;  
-	
-	speed		  : in  std_logic_vector (31 downto 0) ;
-	clk_rs16   : out std_logic ; -- RS232 clock *16
-	baud_sel   : out std_logic_vector(3 downto 0) 
-);
-
-end m_rs232_gclk;
-
-architecture Behavioral of m_rs232_gclk is
-
-signal clk_counter : std_logic_vector(15 downto 0) ;
-signal clk_out : std_logic ;
-signal baud_div : std_logic_vector(15 downto 0) ;
-
-begin
 
 process(clk42m, reset)
 begin	
@@ -282,9 +266,10 @@ begin
 		
 			if clk_counter = 1 then
 				clk_out <= not clk_out ;
-				clk_rs16 <= not clk_out ;
+				if clk_out='1' then clk_rs16 <= '1' ; end if ;
 				clk_counter <= baud_div;   
 			else 
+			   clk_rs16 <= '0' ;
 				clk_counter <= clk_counter - 1;
 			end if;
 		end if;
