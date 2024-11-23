@@ -57,7 +57,30 @@ Port (
 end m_rs232_uart;
 
 architecture Behavioral of m_rs232_uart is
-   
+  
+  component dpram is
+    generic (
+      DATA : integer;
+      ADDR : integer
+      );
+    port (
+      -- Port A
+      a_clk : in std_logic;
+      a_wr : in std_logic;
+      a_addr : in std_logic_vector(ADDR-1 downto 0);
+      a_din : in std_logic_vector(DATA-1 downto 0);
+      a_dout : out std_logic_vector(DATA-1 downto 0);
+
+      -- Port B
+      b_clk : in std_logic;
+      b_wr : in std_logic;
+      b_addr : in std_logic_vector(ADDR-1 downto 0);
+      b_din : in std_logic_vector(DATA-1 downto 0);
+      b_dout : out std_logic_vector(DATA-1 downto 0)
+      );
+  end component dpram;
+
+ 
 signal clk_rs16   : std_logic ; -- RS232 clock *16
 signal baud_sel   : std_logic_vector(3 downto 0) ;
 
@@ -72,8 +95,6 @@ signal baud_sw : std_logic_vector(2 downto 0);
 
 signal UART_OVERRUN : std_logic ;
 signal UART_FRAME : std_logic ;
-signal UART_OVERRUN_C : std_logic ;
-
 
 signal TX_BUFFER : std_logic_vector(7 downto 0);
 signal TX_BUFFER_READY : std_logic ;
@@ -87,31 +108,39 @@ signal TX_STATE_CTR : std_logic_vector(3 downto 0); -- divider by 16
 signal RX_RESET : std_logic ;
 signal RX_RESET_CLR : std_logic ;
 signal RX_SHIFT : std_logic_vector(7 downto 0);
-signal RX_BUFFER : std_logic_vector(7 downto 0);
+signal RX_BUFFER : std_logic_vector(8 downto 0); -- Frame Flag & 8-bits data
+signal RX_DATA : std_logic_vector(8 downto 0); -- Frame Flag & 8-bits data
 signal RX_BUFFER_READY : std_logic ;
-signal RX_BUFFER_READY_CLR : std_logic ;
+
 signal RX_STATE_CTR : std_logic_vector(3 downto 0); -- divider by 16
 signal RX_STATE : std_logic_vector(3 downto 0);
 signal UART_RXD_PREV : std_logic ;
 
+signal FIFO_WR : std_logic ;   -- write in fifo
+signal RX_FIFO_RD : std_logic_vector(4 downto 0); 
+signal RX_FIFO_WR : std_logic_vector(4 downto 0); 
+
+signal uart_dtr_rts  : std_logic_vector(1 downto 0); --for debug only
 begin
 	
 process(reset, clk42m)
 begin
- --  if (reset='1') or ( (addr = "01") and iow_n='0' and cs_n='0') then
    if (reset='1') then
       UART_CD <= '1' ;
 		UART_DTR <= '0' ;
 		UART_RTS <= '0' ;
+		UART_FRAME <= '0' ;
+		uart_dtr_rts <= "00" ;
 		UART_BRK <= '1' ;
-		RX_BUFFER_READY_CLR <= '0' ;
 		TX_BUFFER_READY_SET <= '0' ;
 		RX_RESET <= '0' ;
-	else
-	   if rising_edge(clk42m) then
-			uart_debug <= RX_BUFFER_READY & not TX_BUFFER_READY & UART_OVERRUN & UART_FRAME & UART_CTS & UART_DSR & UART_CD & UART_RXD & '0' & baud_sw;
+		RX_FIFO_RD <= "00000" ;
+	elsif rising_edge(clk42m) then
+			-- uart_debug <= RX_BUFFER_READY & not TX_BUFFER_READY & UART_OVERRUN & UART_FRAME & UART_CTS & UART_DSR & UART_CD & UART_RXD & '0' & baud_sw;
+			uart_debug <= RX_BUFFER_READY & not TX_BUFFER_READY & uart_dtr_rts & UART_CTS & UART_DSR & UART_CD & UART_RXD & '0' & baud_sw;
+			-- uart_debug <= RX_FIFO_RD & "00" & RX_FIFO_WR ;
 			if RX_RESET_CLR='1' then RX_RESET<='0' ; end if ;
-			if RX_BUFFER_READY='0' then RX_BUFFER_READY_CLR<='0' ; end if;
+			-- if RX_BUFFER_READY='0' then RX_BUFFER_READY_CLR<='0' ; end if;
 			if TX_BUFFER_READY='1' then TX_BUFFER_READY_SET<='0'; end if;
 			if uart_mode=0 then UART_CD<='1'; else UART_CD<='0' ; end if;
 			case baud_sel is 
@@ -133,6 +162,7 @@ begin
 			if (addr = "10") and (cs_n='0') and (iow_n='0') then
 				UART_DTR <= DI(0); 
 				UART_RTS <= DI(1); 
+				uart_dtr_rts <= DI(1 downto 0) ;
 				UART_BRK <= DI(2); 
 			end if ;
 			if (addr = "11") and (cs_n='0') and (iow_n='0')  and (TX_BUFFER_READY='0') and (TX_BUFFER_READY_SET='0') then
@@ -141,11 +171,10 @@ begin
 				TX_BUFFER_READY_SET <= '1' ;
 			end if ;
 			if (addr = "11") and (cs_n='0') and (ior_n='0')  then 
-				DO <= RX_BUFFER ;
-				-- RX_BUFFER_READY <= '0' ;
-				RX_BUFFER_READY_CLR <= '1' ;
+				DO <= RX_BUFFER(7 downto 0) ;
+				UART_FRAME <= RX_BUFFER(8) ;
+				if RX_FIFO_WR /= RX_FIFO_RD then RX_FIFO_RD <= RX_FIFO_RD + 1 ; end if;
 			end if ;
-		end if ;
 	end if;
 end process;	
 
@@ -156,85 +185,106 @@ begin
 		TX_STATE <= "0000" ;
 		TX_STATE_CTR <= "0000" ;
 		UART_TXD <= '1' ;
-	elsif rising_edge(clk42m) and clk_rs16='1' then
+	elsif rising_edge(clk42m) then
 		if TX_BUFFER_READY_SET='1' then TX_BUFFER_READY<='1' ; end if ;
-		TX_STATE_CTR <= TX_STATE_CTR + 1 ; -- divide clock by 16
-		case TX_STATE is
-		when "0000" => if TX_BUFFER_READY='1' then
+		if clk_rs16='1' then
+			TX_STATE_CTR <= TX_STATE_CTR + 1 ; -- divide clock by 16
+			case TX_STATE is
+			when "0000" => if TX_BUFFER_READY='1' then
 					TX_SHIFT <= TX_BUFFER  ;  -- no parity, one stop
 					TX_BUFFER_READY <= '0' ;
 					TX_STATE <= "0001" ;  -- sync clock from this start bit
 					UART_TXD <= not UART_BRK; -- start bit now
 					TX_STATE_CTR <= "0000" ;
 				end if;
-		when "1010" => if TX_STATE_CTR=15 then
+			when "1010" => if TX_STATE_CTR=15 then
 					TX_STATE <= "0000" ;
 					UART_TXD <= '1'; 
 				end if;
-		when others => if TX_STATE_CTR=15 then
+			when others => if TX_STATE_CTR=15 then
 					UART_TXD <= not UART_BRK or TX_SHIFT(0) ;
 					TX_SHIFT <= '1' & TX_SHIFT(7 downto 1) ;
 				   TX_STATE <= TX_STATE+1 ;	
 				end if;
-		end case ;
+			end case ;
+		end if;
 	end if;
 end process;
 
+rs232buf : dpram  -- 32-bytes input buffer
+generic map (
+	DATA => 9,
+	ADDR => 5
+)
+port map (
+	-- Port A - used for UART
+	a_clk  => clk42m,
+	a_wr   => FIFO_WR,
+	a_addr => RX_FIFO_WR+1,
+	a_din  => RX_DATA, -- FRAME & DATA
+	-- a_dout => dout,
+
+	-- Port B - used by CPU
+	b_clk  => clk42m,
+	b_wr   => '0',
+	b_addr => RX_FIFO_RD,
+	b_din  => (others => '0'),
+   b_dout => RX_BUFFER
+);
 
 process(clk42m, reset)
 begin
-   if (reset='1') then
+   if reset='1' then
+		FIFO_WR <= '0' ;
 		RX_STATE <= "0000" ;
 		RX_STATE_CTR <= "0000" ;
 		RX_BUFFER_READY <= '0' ;
 		UART_OVERRUN <= '0' ;	
-		UART_OVERRUN_C <= '0' ;
-		UART_FRAME <= '0' ;
-		RX_BUFFER <= "00000000" ;
+		RX_FIFO_WR <= "00000" ;
 		RX_RESET_CLR <= '0' ;
-	elsif rising_edge(clk42m) and clk_rs16='1' then
-	   if RX_RESET='1' then
+	elsif rising_edge(clk42m) then
+		--if RX_BUFFER_READY_CLR='1' then RX_BUFFER_READY<='0' ; end if ;
+		if RX_RESET='1' then
 			UART_OVERRUN <= '0' ;
-			UART_OVERRUN_C <= '0' ;
-			UART_FRAME <= '0' ;
-			RX_BUFFER_READY <= '0' ;
-			RX_BUFFER <= "00000000" ;
 			RX_RESET_CLR <= '1' ;
 		else 
 			RX_RESET_CLR<='0' ;
 		end if ;
-	
-		if RX_BUFFER_READY_CLR='1' then RX_BUFFER_READY<='0' ; end if ;
-		RX_STATE_CTR <= RX_STATE_CTR + 1 ;
-		UART_RXD_PREV <= UART_RXD ;
-	   case RX_STATE is
-	   when "0000" => if UART_RXD='0' and UART_RXD_PREV='1' then -- start bit 
-				RX_STATE <= "0001" ;
-				RX_STATE_CTR <= "0111" ; -- position to half-bit 
-			end if;
-		when "0001" => if RX_STATE_CTR=0 then
-		
-				-- RX_SHIFT <= UART_RXD & "0000000" ;
-				RX_SHIFT <= "00000000" ;
-				RX_STATE <= "0010" ;
-			end if;
-		when "1010" => if RX_STATE_CTR=0 then
-				if RX_BUFFER_READY = '1' then 
-					UART_OVERRUN_C <= '1' ; 
-				else
-				   UART_FRAME <= not UART_RXD ;
-					UART_OVERRUN <= UART_OVERRUN_C ;
-					UART_OVERRUN_C <= '0' ;
-					RX_BUFFER <= RX_SHIFT ;
-					RX_BUFFER_READY <= '1' ;
+      if FIFO_WR = '1' then
+			UART_OVERRUN <= '0' ; 
+			FIFO_WR <= '0' ;
+			RX_FIFO_WR <= RX_FIFO_WR + 1 ;
+			RX_BUFFER_READY <= '1' ;
+	   else	
+			if RX_FIFO_RD = RX_FIFO_WR then RX_BUFFER_READY <= '0' ; else RX_BUFFER_READY <= '1' ; end if ;
+		end if ;
+		if clk_rs16='1' then
+			RX_STATE_CTR <= RX_STATE_CTR + 1 ;
+			UART_RXD_PREV <= UART_RXD ;
+			case RX_STATE is
+				when "0000" => if UART_RXD='0' and UART_RXD_PREV='1' then -- start bit 
+					RX_STATE <= "0001" ;
+					RX_STATE_CTR <= "0111" ; -- position to half-bit 
 				end if;
-				RX_STATE <= "0000" ;
-			end if;
-		when others => if RX_STATE_CTR=0 then
-				RX_SHIFT <= UART_RXD & RX_SHIFT(7 downto 1) ;
-				RX_STATE <= RX_STATE+1 ;
-			end if;
-	   end case;
+				when "0001" => if RX_STATE_CTR=0 then
+					RX_SHIFT <= "00000000" ;
+					RX_STATE <= "0010" ;
+				end if;
+				when "1010" => if RX_STATE_CTR=0 then
+					if RX_FIFO_RD = RX_FIFO_WR + 1  then 
+						UART_OVERRUN <= '1' ; 
+					else 
+						FIFO_WR <= '1' ;
+						RX_DATA <= not UART_RXD & RX_SHIFT ;
+					end if ;
+					RX_STATE <= "0000" ;
+				end if;
+				when others => if RX_STATE_CTR=0 then
+					RX_SHIFT <= UART_RXD & RX_SHIFT(7 downto 1) ;
+					RX_STATE <= RX_STATE+1 ;
+				end if;
+			end case;
+		end if ;
 	end if;
 end process;	
 
@@ -247,7 +297,7 @@ begin
 	if reset='1' then
 		clk_rs16 <= '0';
 		clk_counter <= x"0001";
-		baud_div <= x"08aa" ;
+		baud_div <= x"022a" ;
 		baud_sel <= x"a" ;
 		clk_out <= '0' ;
 		clk_rs16 <= '0' ;
