@@ -319,17 +319,8 @@ begin
 				end
 			end
 			LOAD_BASIC_INSERT_CODE: begin
-				loader_data <= 	 // CD F8 1A CD 5D 1B C3 19 1A
-					(nullbytes == 4'h00) ? 8'hcd : // call reindex lines
-					(nullbytes == 4'h01) ? 8'hf8 : 
-					(nullbytes == 4'h02) ? 8'h1a : 
-					(nullbytes == 4'h03) ? 8'hcd : // call reset variables
-					(nullbytes == 4'h04) ? 8'h5d : 
-					(nullbytes == 4'h05) ? 8'h1b : 
-					(nullbytes == 4'h06) ? 8'hc3 : // jp basic
-					(nullbytes == 4'h07) ? 8'h19 : 
-					(nullbytes == 4'h08) ? 8'h1a : 8'd0 ;
-				if (nullbytes==4'd0)buf_addr <= loader_addr  ;
+
+				
 				loader_wr <= 1;		
 				if (nullbytes==4'h09)
 				begin
@@ -338,6 +329,18 @@ begin
 					loader_data <= buf_addr[7:0];
 					state <= LOAD_BASIC_END ;
 				end else begin
+					loader_data <= 	 // CD F8 1A CD 5D 1B C3 19 1A
+						(nullbytes == 4'h00) ? 8'hcd : // call reindex lines
+						(nullbytes == 4'h01) ? 8'hf8 : 
+						(nullbytes == 4'h02) ? 8'h1a : 
+						(nullbytes == 4'h03) ? 8'hcd : // call reset variables
+						(nullbytes == 4'h04) ? 8'h5d : 
+						(nullbytes == 4'h05) ? 8'h1b : 
+						(nullbytes == 4'h06) ? 8'hc3 : // jp basic
+						(nullbytes == 4'h07) ? 8'h19 : 
+						(nullbytes == 4'h08) ? 8'h1a : 8'd0 ;	
+						
+			      if (nullbytes==4'd0) buf_addr <= loader_addr + 16'd1  ; 	
 					loader_addr <= loader_addr + 16'd1 ; 
 					nullbytes += 4'd1 ;	
 				end
@@ -349,7 +352,7 @@ begin
 				loader_wr <= 1;
 				nullbytes += 4'd1 ;
 				loader_addr <= loader_addr + 16'd1 ; 
-				if (nullbytes == 4'd5) state <= LOAD_BASIC_END2 ;
+				if (nullbytes == 4'd6) state <= LOAD_BASIC_END2 ;
 			end
 			LOAD_BASIC_END2: begin
 				execute_addr <= buf_addr ;
