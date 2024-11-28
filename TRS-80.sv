@@ -194,7 +194,7 @@ localparam CONF_STR = {
  	"S3,DSKJV1,Mount Disk 3:;",
 	"-;",
 //	"F3,*,Upload File(s);",
-	"F2,CMD,Load Program;",
+	"F2,CMDBAS,Load Program;",
 	"F1,CAS,Load Cassette;",
 	"-;",
 	"O56,Screen Color,White,Green,Amber;",
@@ -228,7 +228,7 @@ wire        ioctl_download;
 wire        ioctl_wr;
 wire [15:0] ioctl_addr;
 wire  [7:0] ioctl_data;
-wire  [7:0] ioctl_index;
+wire  [15:0] ioctl_index;
 wire	    ioctl_wait;
 wire [31:0] sd_lba[NBDRIV];
 wire [31:0] sd_lba_0;
@@ -252,6 +252,7 @@ wire [21:0] gamma_bus;
 wire [15:0] joystick_0, joystick_1;
 wire [31:0] uart_speed;
 wire [7:0] uart_mode;
+wire [15:0] other_debug ;
 
 hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 (
@@ -274,7 +275,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 	.ioctl_dout(ioctl_data),
 	.ioctl_wait(ioctl_wait),
 	.ioctl_index(ioctl_index),
-
+	
 	.sd_lba(sd_lba),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
@@ -317,24 +318,29 @@ cmd_loader cmd_loader
 	.ioctl_addr(ioctl_addr),
 	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
-
+	
+	.loader_dbg(other_debug),
 	.loader_wr(loader_wr),
 	.loader_download(loader_download),
 	.loader_addr(loader_addr),
 	.loader_data(loader_data),
+	.loader_din(trsram_din),
 	.execute_addr(execute_addr),
 	.execute_enable(execute_enable)
 //	.iterations(iterations)		// Debugging only
 );
 
 wire trsram_wr;			// Writing loader data to ram 
+wire trsram_rd;			// Reading loader data from ram 
 wire trsram_download;	// Download in progress (active high)
 wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
+wire [7:0] trsram_din;
 
 assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
+assign trsram_rd = loader_download ;
 assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 1'b0;
-assign trsram_addr = loader_download ? {8'b0, loader_addr} : {|ioctl_index,ioctl_addr};
+assign trsram_addr = loader_download ? {8'b0, loader_addr} : {7'b0,|ioctl_index[5:0],ioctl_addr};
 assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
@@ -380,12 +386,15 @@ trs80 trs80
 	.overclock(status[9:8]),
 	.flicker(status[14]),
 	.debug(status[15]),
-
+	.other_debug(other_debug),
+	
 	.dn_clk(clk_sys),
 	.dn_go(trsram_download),
 	.dn_wr(trsram_wr),
+	.dn_rd(trsram_rd),
 	.dn_addr(trsram_addr),			// CPU = 0000-FFFF; cassette = 10000-1FFFF
-	.dn_data(trsram_data),
+	.dn_data(trsram_data),	
+	.dn_din(trsram_din),
 
 	.loader_download(loader_download),
 	.execute_addr(execute_addr),

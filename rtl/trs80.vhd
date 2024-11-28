@@ -72,14 +72,17 @@ Port (
 	lcasetype  : in  STD_LOGIC;
 	overscan   : in  STD_LOGIC_VECTOR(1 downto 0);
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
-	flicker	   : in  STD_LOGIC;
-	debug	   : in  STD_LOGIC;
+	flicker	  : in  STD_LOGIC;
+	debug	     : in  STD_LOGIC;
+	other_debug	: in std_logic_vector(15 downto 0);
 
 	dn_clk     : in  std_logic;
 	dn_go      : in  std_logic;
 	dn_wr      : in  std_logic;
+	dn_rd		  : in  std_logic;
 	dn_addr    : in  std_logic_vector(24 downto 0);
 	dn_data    : in  std_logic_vector(7 downto 0);
+	dn_din	  : out std_logic_vector(7 downto 0);
 
 	loader_download : in std_logic;
 	execute_addr	: in std_logic_vector(15 downto 0);
@@ -255,7 +258,7 @@ component fdc1771 is
 			sector_out		: out  std_logic_vector(7 downto 0);	
 			data_in_out		: out  std_logic_vector(7 downto 0);	
 			status_out		: out  std_logic_vector(7 downto 0);
-			spare_out		: out  std_logic_vector(11 downto 0)   -- spare for debugging other stuff FLYNN
+			spare_out		: out  std_logic_vector(15 downto 0)   -- spare for debugging other stuff FLYNN
 		);
 end component ;
 
@@ -318,7 +321,7 @@ signal dbg_track : std_logic_vector(7 downto 0);
 signal dbg_sector : std_logic_vector(7 downto 0);
 signal dbg_data_in : std_logic_vector(7 downto 0);
 signal dbg_status : std_logic_vector(7 downto 0);
-signal dbg_spare : std_logic_vector(11 downto 0);
+signal dbg_spare : std_logic_vector(15 downto 0);
 
 -- 0  1  2 3   4
 -- 28 14 7 3.5 1.75
@@ -861,16 +864,23 @@ begin
 		elsif (dbugmsg_addr = 41) then							
 			dbugmsg_data <= x"78";				-- x
 		elsif (dbugmsg_addr = 42) then
---			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
-			dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8)));
+--			dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11)));
+--			dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 11)));
+			dbugmsg_data <= hex(conv_integer(other_debug(15 downto 12)));
 		elsif (dbugmsg_addr = 43) then
---			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
-			dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
+--			dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8)));
+			dbugmsg_data <= hex(conv_integer(other_debug(11 downto 8)));
 		elsif (dbugmsg_addr = 44) then							
+--			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4)));
+			dbugmsg_data <= hex(conv_integer(other_debug(7 downto 4)));
+		elsif (dbugmsg_addr = 45) then							
 --			dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0)));
-			dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0)));
+--			dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0)));
+			dbugmsg_data <= hex(conv_integer(other_debug(3 downto 0)));
 			
-		elsif (dbugmsg_addr = 46) then			-- Tick Counter (after space)
+		elsif (dbugmsg_addr = 47) then			-- Tick Counter (after space)
 			if(tick_1s='0') then
 				dbugmsg_data <= x"20";
 			else
@@ -1028,8 +1038,10 @@ port map
 	b_dout => ram_b_dout
 );
 
-ram_a_addr <= dn_addr(16 downto 0) when dn_wr = '1' else io_ram_addr(16 downto 0);
+ram_a_addr <= dn_addr(16 downto 0) when dn_wr='1' or dn_rd='1' else io_ram_addr(16 downto 0);
 ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
+dn_din <= ram_a_dout ;
+-- dn_din <= ram_a_addr(16) & ram_a_addr(6 downto 0) ; -- test
 
 process (clk42m,dn_go,loader_download,reset)
 begin
