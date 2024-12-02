@@ -20,7 +20,7 @@ The TRS-80 with Disk Drives attached will boot to a screen of '@' symbols and wi
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
 
 ### To load a BAS file:
-Only basic Level II programs can be loaded. Load Basic (with or without a DOS) and once at the prompt ">" select a \*.bas file from the OSD. It should answer by printing "READY". Use "RUN" to start the program as usual. 
+Only basic Level II programs can be loaded. Load Basic (with or without a DOS) and once at the prompt ">" select a \*.bas file from the OSD. Use "LIST" or "RUN" to see and start the program as usual. 
 
 ### To load files from DSK images:
 There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 240 tracks, all tracks must currently hold 10 x 256 byte sectors.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
