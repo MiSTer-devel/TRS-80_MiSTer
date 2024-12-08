@@ -6,7 +6,7 @@
 -- based on the UART TR1602B chip
 --
 -- ============================================================================
---  (c)2017-2020 Alexey Melnikov
+--  (c)2017-2024 Alexey Melnikov
 --
 --  This program is free software; you can redistribute it and/or modify it
 --  under the terms of the GNU General Public License as published by the Free

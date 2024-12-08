@@ -55,7 +55,7 @@ begin
         2'b0,               // 209-208 - IM
         127'b0,             // 207-080 - Regular and Alt registers
         //dir_in[211:80],
-        execute_addr[15:8], // 079-071 - PCH
+        execute_addr[15:8], // 079-072 - PCH
         execute_addr[7:0],  // 071-064 - PCL
         SP_ADDR[15:8],      // 063-056 - SPH
         SP_ADDR[7:0],       // 055-048 - SPL

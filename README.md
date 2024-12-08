@@ -32,11 +32,27 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Expansion interface with quad disk drives
  * Real Time Clock (RTC)
  * RS232-C Interface (IO ports $E8 to $EA)
+ * SavedStates
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
  * Cassette loading is many times faster than the original 500 baud
  * Ctrl Key simulates shift-DownArrow
- 
+
+## How to use the Saved States
+ * You must first create "rom_names" each virtually containing 4 saved states numbered from 1 to 4 and selected in the OSD
+ * To create these slots just put a non-empty file with a .SAV extension anywhere, but preferably in games/TRS-80
+ * An easy linux/MiSTer command to do this is : echo "A">/media/fat/games/TRS-80/MySave001.SAV
+ * You can create as many save "rom_names" as you want, they are just needed to define the "rom_name" under which the savestates are done, this aside they are not used.
+ * Use the OSD to select a slot with the "Snapshot "\*.SAV" OSD entry, and a state number from the "Savestate slot" OSD entry 
+ * the physical saves are stored in /media/fat/savestates/TRS-80
+ * the UI is a bit primitive for the moment, this will be updated in the future probably.
+ * The SaveStates mecanism saves the video memory, the main memory and the processor's internal registers and states. It doesn't save any other peripheral, notably not the disk controller. That should be ok though, but don't do bizarre things like making a snapshot right in the middle of a writing sectors sequence, it's not gonna end well.
+ * The details of the format of the savestate file are as follow :
+   - 0000-000f : Mister header, serial number of the save and file size in 32bits words
+   - 0010-002f : Z80 registers
+   - 0030-042F : Video Screen 
+   - 0430-c42f : Main Memory (4000-ffff) 
+
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
  * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images (disabled for now)

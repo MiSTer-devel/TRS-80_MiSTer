@@ -49,6 +49,7 @@ Port (
 	reset      : in  std_logic;
 
 	clk42m     : in  STD_LOGIC;
+	cpum1_out  : out STD_LOGIC;
 
 	RGB        : out STD_LOGIC_VECTOR (17 downto 0);
 	HSYNC      : out STD_LOGIC;
@@ -74,7 +75,6 @@ Port (
 	overclock  : in  STD_LOGIC_VECTOR(1 downto 0);
 	flicker	  : in  STD_LOGIC;
 	debug	     : in  STD_LOGIC;
-	other_debug	: in std_logic_vector(15 downto 0);
 
 	dn_clk     : in  std_logic;
 	dn_go      : in  std_logic;
@@ -109,7 +109,24 @@ Port (
 	UART_DSR       :in  std_logic;
 	
 	uart_mode	   :in std_logic_vector(7 downto 0);
-	uart_speed	   :in std_logic_vector(31 downto 0)
+	uart_speed	   :in std_logic_vector(31 downto 0);
+	
+	-- interface to DDR3 for savestates
+	-- DDRAM_CLK       :out  std_logic; == clk_sys == clk42m
+	DDRAM_BUSY      :in  std_logic;
+	DDRAM_BURSTCNT  :out  std_logic_vector(7 downto 0);
+	DDRAM_ADDR      :out  std_logic_vector(28 downto 0);
+	DDRAM_DOUT      :in  std_logic_vector(63 downto 0);
+	DDRAM_DOUT_READY :in  std_logic;
+	DDRAM_RD        :out  std_logic;
+	DDRAM_DIN       :out  std_logic_vector(63 downto 0);
+	DDRAM_BE        :out  std_logic_vector(7 downto 0);
+	DDRAM_WE        :out  std_logic ;
+	
+	-- save/load states
+	load_state      : in  STD_LOGIC ;
+	save_state      : in  STD_LOGIC ;
+	ss_slot			 : in  std_logic_vector(1 downto 0)
 );
 end trs80;
 
@@ -288,6 +305,30 @@ port (
 );
 end component ;
 
+component ddram is
+port (
+	DDRAM_CLK : in std_logic ;
+	DDRAM_BUSY : in std_logic ;
+	DDRAM_BURSTCNT : out std_logic_vector(7 downto 0) ;
+	DDRAM_ADDR : out std_logic_vector(28 downto 0) ;
+	DDRAM_DOUT : in std_logic_vector(63 downto 0) ;
+	DDRAM_DOUT_READY : in std_logic ;
+	DDRAM_RD : out std_logic ;
+	DDRAM_DIN : out std_logic_vector(63 downto 0) ;
+	DDRAM_BE : out std_logic_vector(7 downto 0) ;
+	DDRAM_WE : out std_logic ;
+	
+	-- save state
+	ch1_addr : in std_logic_vector(27 downto 1) ;
+	ch1_dout : out std_logic_vector(63 downto 0) ;
+	ch1_din : in std_logic_vector(63 downto 0) ;
+	ch1_req : in std_logic ;
+	ch1_rnw : in std_logic ;
+	ch1_be : in std_logic_vector(7 downto 0) ;
+	ch1_ready : out std_logic 
+);
+end component ;
+
 signal ch_a  : std_logic_vector(7 downto 0);
 signal ch_b  : std_logic_vector(7 downto 0);
 signal ch_c  : std_logic_vector(7 downto 0);
@@ -297,6 +338,8 @@ signal ram_a_addr : std_logic_vector(16 downto 0);
 signal ram_b_addr : std_logic_vector(16 downto 0);
 signal ram_a_dout : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_b_dout : STD_LOGIC_VECTOR(7 downto 0);
+signal ram_b_din : STD_LOGIC_VECTOR(7 downto 0);
+signal ram_b_wr  : std_logic ;
 
 signal cpua     : std_logic_vector(15 downto 0);
 signal cpudo    : std_logic_vector(7 downto 0);
@@ -306,7 +349,9 @@ signal cpuclk,cpuclk_r : std_logic;
 signal clk_25ms : std_logic;
 
 signal rgbi : std_logic_vector(3 downto 0);
-signal vramdo,kbdout : std_logic_vector(7 downto 0);
+signal vramdo, kbdout, video_dout: std_logic_vector(7 downto 0);
+signal video_addr : std_logic_vector(13 downto 0);
+signal video_wr : std_logic;
 
 signal Fn : std_logic_vector(11 downto 0);
 signal modif : std_logic_vector(2 downto 0);
@@ -362,10 +407,12 @@ signal inkpulse, paperpulse, borderpulse : std_logic;
 signal widemode : std_logic := '0';
 
 -- Z80 Register control
---signal REG std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+signal REG : std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
 signal DIRSet : std_logic := '0';
+signal DIRSetZ80 : std_logic := '0';
 signal DIR : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
 --signal REG : std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+signal DIRZ80, SS_DIR : std_logic_vector(211 downto 0);
 -- Gated CPU clock
 signal GCLK : std_logic; -- Pause CPU when loading CMD files (prevent crash)
 
@@ -413,11 +460,35 @@ signal clk_rs16 : std_logic ;
 signal rs232_cs : std_logic ;
 signal rs232_rd : std_logic ;
 signal rs232_out : std_logic_vector(7 downto 0);
-signal uart_debug : std_logic_vector(11 downto 0);
+--signal uart_debug : std_logic_vector(11 downto 0);
+
+-- Save state
+signal ss_state : std_logic_vector(7 downto 0);
+signal ss_sel : std_logic ;
+signal ss_video_wr : std_logic ;
+signal ss_dd_dout : std_logic_vector(63 downto 0);
+signal ss_dout : std_logic_vector(7 downto 0);
+signal ss_dd_din : std_logic_vector(63 downto 0);
+signal ss_dd_addr : std_logic_vector(27 downto 1);
+signal ss_dd_ready : std_logic ;
+signal ss_dd_rnw : std_logic ;
+signal ss_dd_be : std_logic_vector(7 downto 0) ;
+signal ss_dd_req : std_logic ;
+signal ss_ram_wr : std_logic ;
+signal ss_DIRSet : std_logic ;
+signal widemode_r, widemode_s : std_logic ;
+
+signal ss_ram_addr : std_logic_vector(15 downto 0);
+-- signal ss_debug_ctr : std_logic_vector(15 downto 0);
 
 begin
 
-GCLK <= '0' when loader_download='1' and execute_enable='0' else cpuClk;
+-- block the Z80 cpu whenever we download something, execute a forced jump 0, or read memory for a save_state !! MAKE SURE TO DO IT IN (cpu)M1 STATE !!
+--GCLK <= '0' when ss_sel = '1' or (loader_download='1' and execute_enable='0') else cpuClk; -- note : we don't need cpu enabled for register load to work properly.
+GCLK <= '0' when ss_sel='1' or loader_download='1' else cpuClk;
+DIRZ80 <= DIR when ss_sel = '0' else SS_DIR ;
+DIRSetZ80 <= DIRSet when ss_sel = '0' else ss_DIRSet ;
+cpum1_out <= cpum1 ;
 
 regset : z80_regset
 port map
@@ -453,25 +524,30 @@ end process;
 -- RTC and FDC irq latch circuit
 process(clk42m, reset)
 begin
-	if reset='1' then
+	if reset='1'  then  
 		clk_25ms_latch <= '1';
 		fdc_irq_latch <= '1';
 	else
 		if rising_edge(clk42m) then
-			if(clk_25ms='1') then -- latch on rising edge
-				clk_25ms_latch <= '0';
-			end if;
-
-			old_fdc_irq <= fdc_irq;
-			if (old_fdc_irq='1' and fdc_irq='0') then
-				fdc_irq_latch <= '0';
-			end if;	
-
-			old_latch_read <= irq_latch_read;
-			if (old_latch_read='1' and irq_latch_read='0') then
+			if ss_sel='1' then
 				clk_25ms_latch <= '1';
 				fdc_irq_latch <= '1';
-			end if;
+			else
+				if(clk_25ms='1') then -- latch on rising edge
+					clk_25ms_latch <= '0';
+				end if;
+
+				old_fdc_irq <= fdc_irq;
+				if (old_fdc_irq='1' and fdc_irq='0') then
+					fdc_irq_latch <= '0';
+				end if;	
+
+				old_latch_read <= irq_latch_read;
+				if (old_latch_read='1' and irq_latch_read='0') then
+					clk_25ms_latch <= '1';
+					fdc_irq_latch <= '1';
+				end if;
+			end if ;
 		end if;
 	end if;
 end process;
@@ -660,9 +736,13 @@ memw <= cpuwr or cpumreq;
 --romrd <= '1' when memr='0' and cpua<x"3780" else '0';
 --ramrd <= '1' when cpua(15 downto 14)="01" and memr='0' else '0';
 --ramwr <= '1' when cpua(15 downto 14)="01" and memw='0' else '0';
-vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else '0';
+vramsel <= '1' when cpua(15 downto 10)="001111" and cpumreq='0' else ss_sel ;
 kbdsel  <= '1' when cpua(15 downto 10)="001110" and memr='0' else '0';
 iorrd <= '1' when ior='0' and (cpua(7 downto 0)=x"04" or cpua(7 downto 0)=x"ff") else '0'; -- in port $04 or $FF
+
+video_addr <= cpua(13 downto 0) when ss_sel='0' else ss_ram_addr(13 downto 0) ;
+video_dout <= cpudo when ss_sel='0' else ss_dout ; 
+video_wr <= cpuwr when ss_sel='0' else '0' when ss_video_wr='1' else '1' ;
 
 fdc_din <= cpudo;
 fdc_sel <= '1' when cpua(15 downto 2)="00110111111011" else '0';
@@ -717,9 +797,9 @@ port map
 	A       => cpua,
 	DI      => cpudi,
 	DO      => cpudo,
---	REG		=> REG,
-	DIR		=> DIR,
-	DIRSet	=> DIRSet
+	REG		=> REG,
+	DIR		=> DIRZ80,
+	DIRSet	=> DIRSetZ80
 );
 
 cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
@@ -751,8 +831,8 @@ port map
 (
 	reset => not reset,
 	clk42 => clk42m,
-	a => cpua(13 downto 0),
-	din => cpudo,
+	a => video_addr,
+	din => video_dout,
 	dout => vramdo,
 	
 	debug_enable => debug,			-- Enable to show disk debugging
@@ -761,7 +841,7 @@ port map
 
 	mreq => cpumreq,
 	iorq => cpuiorq,
-	wr => cpuwr,
+	wr => video_wr,
 	cs => not vramsel,
 	rgbi => rgbi,
 	ce_pix => ce_pix,
@@ -866,19 +946,26 @@ begin
 		elsif (dbugmsg_addr = 42) then
 --			dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 11)));
-			dbugmsg_data <= hex(conv_integer(other_debug(15 downto 12)));
+			dbugmsg_data <= hex(conv_integer(ss_dd_din(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(execute_addr(15 downto 12)));
+			
 		elsif (dbugmsg_addr = 43) then
 --			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8)));
-			dbugmsg_data <= hex(conv_integer(other_debug(11 downto 8)));
+			dbugmsg_data <= hex(conv_integer("00" & ss_slot));
+--			dbugmsg_data <= hex(conv_integer(execute_addr(11 downto 8)));
+			
 		elsif (dbugmsg_addr = 44) then							
 --			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4)));
-			dbugmsg_data <= hex(conv_integer(other_debug(7 downto 4)));
+			dbugmsg_data <= hex(conv_integer(ss_state(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(execute_addr(7 downto 4)));
+			
 		elsif (dbugmsg_addr = 45) then							
 --			dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0)));
-			dbugmsg_data <= hex(conv_integer(other_debug(3 downto 0)));
+			dbugmsg_data <= hex(conv_integer(ss_state(3 downto 0)));
+--			dbugmsg_data <= hex(conv_integer(execute_addr(3 downto 0)));
 			
 		elsif (dbugmsg_addr = 47) then			-- Tick Counter (after space)
 			if(tick_1s='0') then
@@ -1032,15 +1119,17 @@ port map
 
 	-- Port B - used for CPU access
 	b_clk  => clk42m,
-	b_wr   => ((not memw) and (cpua(15) or cpua(14))),
+	b_wr   => ram_b_wr,
 	b_addr => ram_b_addr,
-	b_din  => cpudo,
+	b_din  => ram_b_din,
 	b_dout => ram_b_dout
 );
 
 ram_a_addr <= dn_addr(16 downto 0) when dn_wr='1' or dn_rd='1' else io_ram_addr(16 downto 0);
-ram_b_addr <= io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
+ram_b_addr <= ('0' & ss_ram_addr) when ss_sel='1' else io_ram_addr(16 downto 0) when iorrd='1' else ('0' & cpua);
 dn_din <= ram_a_dout ;
+ram_b_din <= ss_dout when ss_sel='1' else cpudo ;
+ram_b_wr <= ((not memw) and (cpua(15) or cpua(14))) when ss_sel='0' else ss_ram_wr ;
 -- dn_din <= ram_a_addr(16) & ram_a_addr(6 downto 0) ; -- test
 
 process (clk42m,dn_go,loader_download,reset)
@@ -1059,6 +1148,7 @@ begin
 	else
 		if rising_edge(clk42m) then
 			cpuClk_r <= cpuClk;
+			if widemode_s='1' then widemode <= widemode_r ; end if ;
 
 			if (cpuClk_r /= cpuClk) and cpuClk='1' then
 			
@@ -1087,7 +1177,6 @@ begin
 					io_ram_addr <= io_ram_addr + 1;
 				end if;
 
-				
 				------  Cassette data I/O (covers port $FF) ------
 				--
 				-- Added in order to support regular/original BIOS ROMs.
@@ -1188,12 +1277,292 @@ port map
 	UART_RTS   => UART_RTS,
 	UART_CTS   => UART_CTS,
 	UART_DTR   => UART_DTR,
-	UART_DSR   => UART_DSR,
+	UART_DSR   => UART_DSR
 	
-	uart_debug => uart_debug
+--	uart_debug => uart_debug
 ) ;
 
+-- DDRAM for the savestates
 
+ddram_ss : ddram
+port map 
+(
+	DDRAM_CLK => clk42m,
+	DDRAM_BUSY =>  DDRAM_BUSY,
+	DDRAM_BURSTCNT  => DDRAM_BURSTCNT,
+	DDRAM_ADDR =>DDRAM_ADDR,
+	DDRAM_DOUT =>  DDRAM_DOUT,	
+	DDRAM_DOUT_READY =>  DDRAM_DOUT_READY,
+	DDRAM_RD =>  DDRAM_RD,
+	DDRAM_DIN  => DDRAM_DIN,
+	DDRAM_BE =>  DDRAM_BE,
+	DDRAM_WE =>  DDRAM_WE,
+	
+	-- save state
+	ch1_addr => ss_dd_addr,
+	ch1_dout => ss_dd_dout, 
+	ch1_din => ss_dd_din, 
+	ch1_req => ss_dd_req,  
+	ch1_rnw => ss_dd_rnw ,
+	ch1_be =>  ss_dd_be,
+	ch1_ready =>  ss_dd_ready 
+) ;
 
+-- savestates process
+
+process(clk42m, reset)
+begin
+	if (reset='1') then
+	   ss_DIRSet <= '0' ;
+		ss_video_wr <= '0' ;
+		ss_dd_addr <= x"e00000" & "000" ;
+		ss_state <= x"00" ; -- IDLE
+		ss_dd_req <= '0' ;
+		ss_dd_rnw <= '0' ;
+		ss_dd_be <= x"FF" ;		
+		ss_ram_addr <= x"0000" ;
+		ss_sel <= '0' ;
+		widemode_r <= '0' ; 
+		widemode_s <= '0' ;
+--		ss_debug_ctr <= x"0000" ;
+	elsif rising_edge(clk42m) then 
+		if save_state = '1' and (ss_state = x"00" or ss_state = x"70" or ss_state = x"25") then ss_state <= x"01" ; end if ;		
+		if load_state = '1' and (ss_state = x"00" or ss_state = x"70" or ss_state = x"25") then ss_state <= x"40" ; end if ;
+
+		ss_dd_req <= '0' ;
+			case ss_state is
+			   when x"01" =>  -- SAVE SCREEN @x3C00 len x400
+						ss_dd_req <= '0' ;
+						ss_sel <='1' ; -- block CPU
+						ss_state <= x"30" ; -- go save the Z80 REGS and come back to state 02
+						ss_ram_addr <= x"3C00" ; -- save video memory
+				when x"02" => ss_state <= x"03" ; ss_ram_addr<=ss_ram_addr+1 ; 
+ 				when x"03" => ss_dd_din(7 downto 0) <= vramdo ; ss_state <= x"04" ; ss_ram_addr<=ss_ram_addr+1 ; ss_dd_req <= '0' ;
+				when x"04" => ss_dd_din(15 downto 8) <= vramdo ; ss_state <= x"05" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"05" => ss_dd_din(23 downto 16) <= vramdo ; ss_state <= x"06" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"06" => ss_dd_din(31 downto 24) <= vramdo ; ss_state <= x"07" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"07" => ss_dd_din(39 downto 32) <= vramdo ; ss_state <= x"08" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"08" => ss_dd_din(47 downto 40) <= vramdo ; ss_state <= x"09" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"09" => ss_dd_din(55 downto 48) <= vramdo ; ss_state <= x"0a" ; ss_ram_addr<=ss_ram_addr+1 ;
+				when x"0a" => ss_dd_din(63 downto 56) <= vramdo ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;		
+						ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ; -- next addr is 8 bytes farther but no bit 0 so, +4
+						ss_ram_addr <= ss_ram_addr + 1 ; 
+						if (ss_ram_addr = x"4000") then
+							ss_state <= x"10" ; else 
+							ss_state <= x"03" ; 
+						end if ;
+		--		
+		-- -- SAVE MAIN MEMORY  @x4000 len xC000 
+		--
+				when x"10" => ss_dd_din(7 downto 0) <= ram_b_dout ; ss_state <= x"11" ; ss_ram_addr<=ss_ram_addr+1 ; ss_dd_req <= '0' ;
+				when x"11" => ss_dd_din(15 downto 8) <= ram_b_dout ; ss_state <= x"12" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"12" => ss_dd_din(23 downto 16) <= ram_b_dout ; ss_state <= x"13" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"13" => ss_dd_din(31 downto 24) <= ram_b_dout ; ss_state <= x"14" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"14" => ss_dd_din(39 downto 32) <= ram_b_dout ; ss_state <= x"15" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"15" => ss_dd_din(47 downto 40) <= ram_b_dout ; ss_state <= x"16" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"16" => ss_dd_din(55 downto 48) <= ram_b_dout ; ss_state <= x"17" ; ss_ram_addr<=ss_ram_addr+1 ; 
+				when x"17" => ss_dd_din(63 downto 56) <= ram_b_dout ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;
+								
+						ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ;-- next addr is 8 bytes farther but no bit 0 so, +4
+						ss_ram_addr <= ss_ram_addr + 1 ; 
+						if (ss_ram_addr = x"0000") then
+							ss_state <= x"20" ; else 
+							ss_state <= x"10" ; 
+						end if ;				
+				when x"20"=> if (DDRAM_BUSY='0') then 
+							ss_dd_req <= '0' ;
+							ss_state <= x"21" ;
+						end if;
+				when x"21"=> if (DDRAM_BUSY='0') then 
+						ss_dd_addr <= x"e0" & "00" & ss_slot & x"000" & "000"  ;
+						ss_dd_rnw <= '1' ;
+						ss_dd_req <= '1' ;
+						ss_state <= x"22" ;
+					end if ;
+				when x"22" => if (ss_dd_ready = '1') then -- wait for DDRAM read to complete
+							ss_state <= x"23" ;
+							ss_dd_din(63 downto 32) <= x"0000310a" ;
+							ss_dd_din(31 downto 0) <= ss_dd_dout(31 downto 0) + 1 ;
+						end if ;		
+						ss_dd_req <= '0' ;
+				
+				when x"23"=> 
+					if (DDRAM_BUSY='0') then
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;
+						ss_dd_req <= '1' ;
+						ss_state <= x"24" ;
+					end if ;
+				when x"24"=> 
+					if (DDRAM_BUSY='0') then
+					  ss_state <= x"25" ;
+					end if;
+					ss_dd_req <= '0' ;
+				--	
+				-- Save Z80 state
+				--	
+				when x"30" =>
+						ss_dd_din(63 downto 0) <= REG(63 downto 0) ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;
+						ss_dd_addr <= x"e0" & "00" & ss_slot & x"001" & "000" ; -- 3e0X:0010
+						ss_state <= x"31" ; 
+				when x"31" =>
+						ss_dd_din(63 downto 0) <= REG(127 downto 64) ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;
+						ss_dd_addr(3) <= '1' ; -- 3e0X:0018
+						ss_state <= x"32" ; 
+				when x"32" =>
+						ss_dd_din(63 downto 0) <= REG(191 downto 128) ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;
+						ss_dd_addr(5 downto 3) <= "100" ; -- 3e0X:0020
+  						ss_state <= x"33" ; 
+				when x"33" =>
+						ss_dd_din(63 downto 0) <= x"ff00000000" & "000" & widemode & REG(211 downto 192) ;
+						ss_dd_be <= x"ff" ; 
+						ss_dd_rnw <= '0' ;  -- write din to DDRAM
+						ss_dd_req <= '1' ;
+						ss_dd_addr(3) <= '1' ; -- 3e0X:0028
+						ss_state <= x"02" ; 
+				-- 
+			--		
+			-- LOAD SaveState		
+			--
+			   when x"40" => if (cpum1 = '0') then 
+							ss_sel <='1' ; -- block CPU
+							ss_dd_addr <= x"e0" & "00" & ss_slot & x"000" & "000" ; --- "11100" ; -- start a few words before the start
+							ss_dd_rnw <= '1' ; 			-- read DDRAM
+							ss_dd_req <= '1' ;
+							ss_state <= x"42" ;
+						end if ;	
+			
+				when x"42" => 
+						if (ss_dd_ready = '1') then  -- DATA has arrived
+							if ss_dd_dout(63 downto 32) = x"0000310a" then						 
+								ss_state <= x"44" ;
+								ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 2  ; -- 3e0X:0008 or 3e0X:0010
+								ss_dd_req <= '1' ;
+							else 
+								ss_state <= x"00" ; -- not a known save from us, or empty slot
+							end if ;
+						end if ;
+									
+				when x"44" => 	if (ss_dd_ready = '1') then  
+							SS_DIR(63 downto 0) <= ss_dd_dout ;  -- REG part 1
+							ss_dd_addr(3) <= '1' ; -- 3e0X:0018
+							ss_dd_req <= '1' ;
+							ss_state <= x"46" ;
+						end if ;		
+						
+				when x"46" => if (ss_dd_ready = '1') then  
+							SS_DIR(127 downto 64) <= ss_dd_dout ;  -- REG part 2
+							ss_dd_addr(5 downto 3) <= "100" ; -- 3e0X:0020
+							ss_dd_req <= '1' ;
+							ss_state <= x"48" ;
+						end if ;			
+			
+				when x"48" => if (ss_dd_ready = '1') then 
+							SS_DIR(191 downto 128) <= ss_dd_dout ;  -- REG part 3
+							ss_dd_addr(3) <= '1' ; -- 3e0X:0028
+							ss_dd_req <= '1' ;
+							ss_state <= x"4a" ;
+						end if ;			
+					
+				when x"4a" => 	if (ss_dd_ready = '1') then
+							ss_state <= x"50" ;
+							ss_ram_addr <= x"3c00" ; -- video memory
+							SS_DIR(211 downto 192) <= ss_dd_dout(19 downto 0) ;  -- REG part 4
+							widemode_r <= ss_dd_dout(20) ;
+							widemode_s <= '1' ;
+						end if ;			
+				
+				when x"50" => 
+							ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ;
+							ss_dd_req <= '1' ;
+							ss_state <= x"51" ;					
+						
+				when x"51" => if (ss_dd_ready = '1') then
+							ss_state <= x"52" ;
+							ss_dout <= ss_dd_dout(7 downto 0) ;  -- write the 8 bytes in screen memory
+							ss_video_wr <= '1' ;  -- write "burst" 8 bytes in a row
+						end if ;		
+						 
+				when x"52" => ss_dout <= ss_dd_dout(15 downto 8) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"53" ;
+				when x"53" => ss_dout <= ss_dd_dout(23 downto 16) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"54" ;
+				when x"54" => ss_dout <= ss_dd_dout(31 downto 24) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"55" ;
+				when x"55" => ss_dout <= ss_dd_dout(39 downto 32) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"56" ;
+				when x"56" => ss_dout <= ss_dd_dout(47 downto 40) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"57" ;
+				when x"57" => ss_dout <= ss_dd_dout(55 downto 48) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"58" ;
+				when x"58" => ss_dout <= ss_dd_dout(63 downto 56) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"59" ;
+				when x"59" => 
+					ss_ram_addr <= ss_ram_addr + 1 ; 
+					if (ss_ram_addr = x"3fff") then
+						ss_state <= x"60" ; 
+					else
+						ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ;
+						ss_dd_req <= '1' ;
+						ss_state <= x"51" ;				
+					end if ;
+					ss_video_wr <= '0' ;  -- stop writing in video mem at each clock
+				--	
+				--  Main Memory
+				--
+				when x"60" => 
+							ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ;
+							ss_dd_req <= '1' ;
+							ss_state <= x"61" ;					
+
+				when x"61" => if (ss_dd_ready = '1') then  -- DATA has arrived
+							ss_state <= x"62" ;
+							ss_dout <= ss_dd_dout(7 downto 0) ;  -- write the 8 bytes in screen memory
+							ss_ram_wr <= '1' ;  -- write "burst" 8 bytes in a row
+						end if ;		
+ 
+				when x"62" => ss_dout <= ss_dd_dout(15 downto 8) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"63" ;
+				when x"63" => ss_dout <= ss_dd_dout(23 downto 16) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"64" ;
+				when x"64" => ss_dout <= ss_dd_dout(31 downto 24) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"65" ;
+				when x"65" => ss_dout <= ss_dd_dout(39 downto 32) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"66" ;
+				when x"66" => ss_dout <= ss_dd_dout(47 downto 40) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"67" ;
+				when x"67" => ss_dout <= ss_dd_dout(55 downto 48) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"68" ;
+				when x"68" => ss_dout <= ss_dd_dout(63 downto 56) ; ss_ram_addr <= ss_ram_addr + 1 ; ss_state <= x"69" ;
+				when x"69" => 
+					ss_ram_addr <= ss_ram_addr + 1 ; 
+					if (ss_ram_addr = x"ffff") then
+						ss_state <= x"6a" ; 
+					else
+						ss_dd_addr(23 downto 3) <= ss_dd_addr(23 downto 3) + 1  ;
+						ss_dd_req <= '1' ;
+						ss_state <= x"61" ;					
+					end if;
+					ss_ram_wr <= '0' ;  -- stop writing in video mem at each clock			
+				
+				-- Load Z80 registers 	
+				when x"6a" => 
+						ss_DIRSet <= '1' ;
+						ss_state <= x"6b" ;
+				when x"6b" => 
+						ss_DIRSet <= '0' ;		
+						ss_state <= x"70" ;  -- and go !
+					
+				when others => 
+					ss_dd_rnw <= '1' ;
+					ss_sel <= '0' ; -- free the CPU
+					ss_DIRSet <= '0' ;
+					widemode_s <= '0' ;
+			end case;	
+		-- end if;
+   end if;	
+end process;
 
 end Behavioral;

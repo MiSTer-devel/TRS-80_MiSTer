@@ -2,6 +2,7 @@
 // HT1080Z for MiSTer IOCTL Loader Module
 //
 // Copyright (c) 2020 Stephen Eddy
+//
 // All additions by "theflynn49" (c) 2024 Alexey Melnikov and the MiSTer community
 //
 // Add clear memory function by theflynn49 nov. 2024
@@ -49,6 +50,7 @@ module cmd_loader
 )
 (
     input wire clock, reset,                // I/O clock and async reset
+	 input wire cpum1,
 	 input wire erase_mem,						  // Erase all memory
 
     input wire      ioctl_download,         // Signal indicating an active download in progress
@@ -58,7 +60,6 @@ module cmd_loader
     input wire [23:0]       ioctl_addr,     // Offset into loaded file
 	 output logic            ioctl_wait,     // Signal from the laoder to hold the current output data
 
-	 output logic [15:0] loader_dbg,  		  // debug
     output logic loader_wr,			        // Signal to write to ram
     output logic loader_download,	        // Download in progress (active high)
     output logic [ADDR-1:0] loader_addr,    // Address in ram to write data to
@@ -72,7 +73,7 @@ module cmd_loader
 //const bit [15:0] SYSTEM_ENTRY_LSB='h40DF;
 //const bit [15:0] SYSTEM_ENTRY_MSB='h40E0;
 
-typedef enum bit [4:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH, 
+typedef enum bit [4:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH, WAIT_M1, WAIT_M1_B, WAIT_M1_E, LOAD_REGS,
 								LOAD_BASIC_S1, LOAD_BASIC_S2, LOAD_BASIC_S3, LOAD_BASIC_S4, LOAD_BASIC_S5, LOAD_BASIC_INSERT_CODE,
 								LOAD_BASIC, LOAD_BASIC_INSERT0, LOAD_BASIC_END, LOAD_BASIC_END2, SET_ZERO, DO_ZERO} loader_states;
 loader_states state;
@@ -112,28 +113,40 @@ begin
 
 		loader_wr <= '0;
       iterations <= iterations + 32'd1;   // Used for debugging
+		if ( (state<FINISH) && (state != IDLE) && (cpum1=='0) ) loader_download <= 1;
 		
 		case(state)
 			IDLE: begin 		// No transfer occurring
 				execute_enable <= 0;
 				ioctl_wait <= 0;				
-		//			loader_dbg <= { ioctl_addr[7:0], ioctl_index[3:0] } ;
 				if(ioctl_download && ioctl_index[5:0]==INDEX && ioctl_index[15:6]==0 && ioctl_addr == '0) begin  // index 2.0
-			//			loader_dbg <= { 1'd0, ioctl_addr[14:0] } ;
-						loader_download <= 1;
-						state <= GET_TYPE;	
+			//		loader_download <= 1;   // this will be done the next time M1 goes to 0, by the statement a few lines above
+													// because we can't wait unless we break the stream down here (that could be fixed later)
+													// and we CANNOT raise loader_download to stop the CPU if M1 is not low
+					state <= GET_TYPE;	
 				end else
 				if(ioctl_download && ioctl_index[5:0]==INDEX && ioctl_index[15:6]==1 && ioctl_addr == '0) begin  // index 2.1
 			//		loader_dbg <= { 1'd1, ioctl_addr[14:0] } ;
-					loader_addr <= 16'h40A4 ; // address of pointer to the Begining of basic in memory
-					loader_download <= 1;
 					ioctl_wait<=1 ; 
-					state <= LOAD_BASIC_S1;
+					state <= WAIT_M1_B;
 				end 
 				else if (erase_mem) begin
-					loader_download <= 1;
-					state <= SET_ZERO;
+					state <= WAIT_M1_E;
 				end
+			end
+			WAIT_M1_B: begin
+				if (cpum1=='0) begin
+					loader_addr <= 16'h40A4 ; // address of pointer to the Begining of basic in memory
+					loader_download <= 1;
+
+					state <= LOAD_BASIC_S1;
+				end 
+			end
+			WAIT_M1_E: begin
+				if (cpum1=='0) begin
+					loader_download <= 1;
+					state <= SET_ZERO;	
+				end 
 			end
 			GET_TYPE: begin		// Start of transfer, load block type
 				if(ioctl_wr) begin
@@ -223,7 +236,7 @@ begin
                     end
                 end else begin	// Move to next block in chain
                     if(block_type == 8'd0 || block_type == 8'd2) begin
-                        state <= FINISH; 
+                        state <= LOAD_REGS; 
                     end else begin
                         //ioctl_wait <= 1;
                         state <= GET_TYPE;
@@ -235,16 +248,20 @@ begin
             //loader_data <= block_addr[15:8];
             //loader_wr <= 1;
 				execute_addr <= block_addr;
-				execute_enable <= 1;	// toggle execute flag
 
             if(block_len > 2)  begin
               	state <= IGNORE; 
             end else begin
-               state <= FINISH; 
+               state <= LOAD_REGS; 
             end					
          end
+			LOAD_REGS: begin
+				execute_enable <= 1;	// toggle execute flag : note that we don't need the CPU clock for this to work
+				state <= FINISH ;
+			end
 			FINISH: begin
-                loader_download <= 0;
+                loader_download <= 0; // free the CPU
+					 execute_enable <= 0;	// toggle execute flag back
                 state <= IDLE;
          end
 			LOAD_BASIC_S1: begin  // expect FF and read LSB(pointer to basic prg)
@@ -255,7 +272,7 @@ begin
 							state <= LOAD_BASIC_S2 ;
 						end else begin
 							// loader_dbg <= 16'h0fff1 ;  // ABORT
-							loader_dbg <=  {ioctl_dout, ioctl_addr[7:0]} ;
+							// loader_dbg <=  {ioctl_dout, ioctl_addr[7:0]} ;
 							state <= IDLE ;   // abort
 							ioctl_wait <= 0 ;
 							loader_download <= 0;
@@ -289,11 +306,11 @@ begin
 						nullbytes <= 4'd0 ;
 						byte_ctr <= 4'd0 ;
 						prev_addr <= basic_ptr ;
-						loader_dbg <=  basic_ptr;
+						// loader_dbg <=  basic_ptr;
 						state <= LOAD_BASIC ;
 					end else begin
 						// loader_dbg <= 16'h0fff2 ;
-						loader_dbg <=  himem_ptr;
+						// loader_dbg <=  himem_ptr;
 						state <= FINISH ; // Incoherent pointers
 					end
 					ioctl_wait <= 0; // either case, let's roll the rest of the file
@@ -301,7 +318,7 @@ begin
 			LOAD_BASIC: begin
 				if(ioctl_wr) begin
 					loader_wr <= 1;
-					loader_dbg <=  basic_ptr;
+					// loader_dbg <=  basic_ptr;
 					if (byte_ctr != 4'd4) byte_ctr <= byte_ctr + 4'd1 ;  // keep track of byte number in the line for the first bytes to skip ptr and line number
 					case (byte_ctr)
 						4'd0: begin
@@ -341,7 +358,7 @@ begin
 				if (~ioctl_download || loader_addr>himem_ptr) begin
 					state <= LOAD_BASIC_INSERT0 ;	
 					nullbytes <= 4'd0 ;
-					loader_dbg <= 16'h0fff3 ; 
+					// loader_dbg <= 16'h0fff3 ; 
 				end
 			end
 			LOAD_BASIC_INSERT0: begin
@@ -372,7 +389,7 @@ begin
 						nullbytes <= 4'd1 ;  // 0+1
 						loader_addr <= 16'h40f9 ;
 						prev_addr <= loader_addr ;
-						loader_dbg <= loader_addr ;
+						// loader_dbg <= loader_addr ;
 						loader_data <= loader_addr[7:0];
 						state <= LOAD_BASIC_END ;
 					end
@@ -391,7 +408,7 @@ begin
 			SET_ZERO: begin
 				loader_addr <= 16'h4000 ; // erase memory from 4000 to FFFF
 				state <= DO_ZERO ;
-				loader_dbg <= '0 ;
+				// loader_dbg <= '0 ;
 			end
 			DO_ZERO: begin
 				if (loader_addr == 16'h0fffd) begin  // allow a few cycles for the CPU to get the REGset signal
