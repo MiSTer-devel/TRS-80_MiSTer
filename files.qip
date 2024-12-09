@@ -8,5 +8,6 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/ym2149.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cmd_loader.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/z80_regset.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/fdc1771/fdc1771.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
 set_global_assignment -name VERILOG_FILE rtl/fdc1771/floppy.v
 set_global_assignment -name SYSTEMVERILOG_FILE TRS-80.sv
