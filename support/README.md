@@ -5,7 +5,7 @@
 
 ### Object
 
-Based on the public domain version of CPM UNZIP version 1.5.7 [url]https://github.com/agn453/UNZIP-CPM-Z80/blob/master/README.md[/url]
+Based on the public domain version of CPM UNZIP version 1.5.7 https://github.com/agn453/UNZIP-CPM-Z80/blob/master/README.md
 This version runs on TRSDOS (and others) and can UnZip files that are injected masquerading as cassette files (\*.CAS)
 
 ### How does it work ?
@@ -26,5 +26,5 @@ This version runs on TRSDOS (and others) and can UnZip files that are injected m
 ### License
 
  The original licebse of UNZIP CPM apply, i.e. none.
- [url]https://github.com/agn453/UNZIP-CPM-Z80/blob/master/LICENSE[/url]
+ https://github.com/agn453/UNZIP-CPM-Z80/blob/master/LICENSE
 
