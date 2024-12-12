@@ -350,7 +350,7 @@ wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
 wire [7:0] trsram_din;
 
-assign trsram_wr = loader_download ? loader_wr : ioctl_wr;
+assign trsram_wr = loader_download ? loader_wr : |ioctl_index[5:1]==1'b0 ?  ioctl_wr : 1'b0 ; // we don't want a spurious write if loader_download is late
 assign trsram_rd = loader_download ;
 assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 1'b0;
 assign trsram_addr = loader_download ? {8'b0, loader_addr} : {7'b0,|ioctl_index[5:0],ioctl_addr};
