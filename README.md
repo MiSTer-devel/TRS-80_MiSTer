@@ -5,7 +5,7 @@ This is a port of [HT1080Z MiST core](https://github.com/mist-devel/ht1080z) by 
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
-The TRS-80 with boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
+The TRS-80 will boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
 
 ### To load a cassette game:
 ```
