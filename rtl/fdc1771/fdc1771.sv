@@ -70,7 +70,7 @@ module fdc1771 (
 	output     [7:0] sector_out,
 	output     [7:0] data_in_out,
 	output     [7:0] status_out,
-	output	  [11:0] spare_out
+	output	  [15:0] spare_out
 
 );
 
@@ -1007,7 +1007,6 @@ always @(posedge clk_sys) begin
 
 	// write sector data arrived from CPU
 	if(cmd[7:5] == 3'b101 && data_in_strobe) fifo_cpuptr <= fifo_cpuptr + 1'd1;
-
 	if(fd_dclk_en) begin
 		if(data_transfer_cnt != 0) begin 
 		   if (drq) begin
@@ -1053,19 +1052,42 @@ always @(posedge clk_sys) begin
 end
 
 // Different logic for fdc1771 status register
-logic s7, s6, s5, s4, s2, s1, s0;
+logic s7, s6, s5, s4, s3, s2, s1, s0;
+reg no_contr, no_contr_set;
+
+always @(posedge clk_sys) begin
+	if (!floppy_reset) begin
+		no_contr<=1'b0 ; 
+		no_contr_set<=1'b0 ; 
+	end else begin
+		if ((no_contr_set==1'b0) && (floppy_ready[0]==1'b0) ) no_contr<=1'b1 ; // set the "no controller present" bit
+		if (floppy_ready[0] == 1'b1) no_contr<=1'b0 ;  // if an image is mounted, cancel everything
+		no_contr_set<=1'b1 ; // lock it
+	end
+end
+
 always_comb
 begin
 	s7 = !fd_ready | notready_wait ;
-	if(!floppy_present) begin		// Pull-ups if no disk attached
-		s6 = 1'b0;
-		s5 = 1'b1;
-		s4 = 1'b0;
-		s2 = 1'b1;
-		s1 = 1'b1;
-		s0 = 1'b0;
-	end
-	else begin
+	if (!floppy_present) begin		// Pull-ups if no disk attached, but wait, it's kind of subtle here.
+		if ((floppy_drive=="1111") || (no_contr==1'b1))  begin // at boot ? (normally we select one drive, but at boot it wants to check if the controller is here
+				s6 = 1'b1;  // simulate no controller
+				s5 = 1'b1;
+				s4 = 1'b1; 
+				s3 = 1'b1;
+				s2 = 1'b1;
+				s1 = 1'b1;
+				s0 = 1'b1;
+		end else begin // not at boot, return credible error with NO data ready, unless it will eventually overwrite some data and crash DOS
+				s6 = 1'b0;
+				s5 = 1'b1;
+				s4 = 1'b0; 
+				s3 = 1'b0;
+				s2 = 1'b1;
+				s1 = 1'b0; 
+				s0 = 1'b0;
+		end 
+	end else begin
 		if(cmd_type_2) begin
 			if(sector_read) begin
 				s6 = 1'b0;
@@ -1096,6 +1118,7 @@ begin
 			s1 = ~fd_index;
 		end
 		s4 = (!floppy_present) || RNF; //s4 = RNF; which stands for seek error too
+		s3 = 1'b0 ; // crc
 		s0 = busy ;
 	end
 end
@@ -1108,7 +1131,7 @@ wire [7:0] status = { s7,
 		      s6,              
 		      s5,  				
 		      s4,               // record not found
-		      1'b0,                                // crc error
+		      s3,              // crc error
 		      s2,
 		      s1,
 		      s0 }; // busy /* synthesis keep */
@@ -1143,7 +1166,7 @@ assign status_out = status;
 // assign spare_out = { 4'd0,  
 //				sector_not_found, sd_card_done, sd_rd, 
 //				sd_card_read, data_transfer_done, data_transfer_can_start, data_transfer_start } ;
-assign spare_out = { had_err_2, had_err_4, controller_type, fd_track != track, drq_count_debug } ;
+assign spare_out = { 3'b000, no_contr, had_err_2, had_err_4, controller_type, fd_track != track, drq_count_debug } ;
 
 localparam FDC_REG_CMDSTATUS    = 0;
 localparam FDC_REG_TRACK        = 1;
