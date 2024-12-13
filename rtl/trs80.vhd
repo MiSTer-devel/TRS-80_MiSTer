@@ -944,27 +944,27 @@ begin
 		elsif (dbugmsg_addr = 41) then							
 			dbugmsg_data <= x"78";				-- x
 		elsif (dbugmsg_addr = 42) then
---			dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11)));
+			dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 11)));
-			dbugmsg_data <= hex(conv_integer(ss_dd_din(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(ss_dd_din(7 downto 4)));
 --			dbugmsg_data <= hex(conv_integer(execute_addr(15 downto 12)));
 			
 		elsif (dbugmsg_addr = 43) then
---			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
+			dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8)));
-			dbugmsg_data <= hex(conv_integer("00" & ss_slot));
+--			dbugmsg_data <= hex(conv_integer("00" & ss_slot));
 --			dbugmsg_data <= hex(conv_integer(execute_addr(11 downto 8)));
 			
 		elsif (dbugmsg_addr = 44) then							
---			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
+			dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4)));
-			dbugmsg_data <= hex(conv_integer(ss_state(7 downto 4)));
+--			dbugmsg_data <= hex(conv_integer(ss_state(7 downto 4)));
 --			dbugmsg_data <= hex(conv_integer(execute_addr(7 downto 4)));
 			
 		elsif (dbugmsg_addr = 45) then							
---			dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0)));
+			dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0)));
 --			dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0)));
-			dbugmsg_data <= hex(conv_integer(ss_state(3 downto 0)));
+--			dbugmsg_data <= hex(conv_integer(ss_state(3 downto 0)));
 --			dbugmsg_data <= hex(conv_integer(execute_addr(3 downto 0)));
 			
 		elsif (dbugmsg_addr = 47) then			-- Tick Counter (after space)
@@ -1332,10 +1332,12 @@ begin
 		ss_dd_req <= '0' ;
 			case ss_state is
 			   when x"01" =>  -- SAVE SCREEN @x3C00 len x400
-						ss_dd_req <= '0' ;
-						ss_sel <='1' ; -- block CPU
-						ss_state <= x"30" ; -- go save the Z80 REGS and come back to state 02
-						ss_ram_addr <= x"3C00" ; -- save video memory
+						if (cpum1 = '0') then  -- wait for state M1 before halting the cpu. 
+							ss_dd_req <= '0' ;
+							ss_sel <='1' ; -- block CPU
+							ss_state <= x"30" ; -- go save the Z80 REGS and come back to state 02
+							ss_ram_addr <= x"3C00" ; -- save video memory
+						end if ;
 				when x"02" => ss_state <= x"03" ; ss_ram_addr<=ss_ram_addr+1 ; 
  				when x"03" => ss_dd_din(7 downto 0) <= vramdo ; ss_state <= x"04" ; ss_ram_addr<=ss_ram_addr+1 ; ss_dd_req <= '0' ;
 				when x"04" => ss_dd_din(15 downto 8) <= vramdo ; ss_state <= x"05" ; ss_ram_addr<=ss_ram_addr+1 ;

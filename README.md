@@ -5,7 +5,7 @@ This is a port of [HT1080Z MiST core](https://github.com/mist-devel/ht1080z) by 
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
-The TRS-80 with Disk Drives attached will boot to a screen of '@' symbols and will then only continue booting once you place a disk in the drive.  To bypass this and boot directly to BASIC to load a cassette game, press Escape immediately after selecting Reset in the OSD menu.
+The TRS-80 will boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
 
 ### To load a cassette game:
 ```
@@ -15,6 +15,7 @@ The TRS-80 with Disk Drives attached will boot to a screen of '@' symbols and wi
   [type the first letter of the file you want to load (e or g for the disk images provided)]
   / (to start once loaded)
 ```
+Note: The cassette loader has a special feature allowing you to load a ZIP file (renamed as a fake .CAS file) and unzip it directly in any DOS with the "MrUnzip/cmd" application you'll find in the support files.
 
 ### To load a CMD file:
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
@@ -35,21 +36,22 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * SavedStates
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
- * Cassette loading is many times faster than the original 500 baud
+ * Cassette loading is many times faster than the original 500 baudi
+ * direct ZIP/UNZIP download feature
  * Ctrl Key simulates shift-DownArrow
 
 ## How to use the Saved States
  * You must first create "rom_names" each virtually containing 4 saved states numbered from 1 to 4 and selected in the OSD
- * To create these slots just put a non-empty file with a .SAV extension anywhere, but preferably in games/TRS-80
+ * To create these "rom_names" just put a non-empty file with a .SAV extension anywhere, but preferably in games/TRS-80
  * An easy linux/MiSTer command to do this is : echo "A">/media/fat/games/TRS-80/MySave001.SAV
- * You can create as many save "rom_names" as you want, they are just needed to define the "rom_name" under which the savestates are done, this aside they are not used.
+ * You can create as many save "rom_names" as you want, they are just needed to define the "rom_name" under which the savestates are saved, and they are not used.
  * Use the OSD to select a slot with the "Snapshot "\*.SAV" OSD entry, and a state number from the "Savestate slot" OSD entry 
- * the physical saves are stored in /media/fat/savestates/TRS-80
- * the UI is a bit primitive for the moment, this will be updated in the future probably.
+ * the physical saves are stored in /media/fat/savestates/TRS-80/
+ * the UI is a bit primitive for the moment, this will be updated in the future (probably).
  * The SaveStates mecanism saves the video memory, the main memory and the processor's internal registers and states. It doesn't save any other peripheral, notably not the disk controller. That should be ok though, but don't do bizarre things like making a snapshot right in the middle of a writing sectors sequence, it's not gonna end well.
  * The details of the format of the savestate file are as follow :
    - 0000-000f : Mister header, serial number of the save and file size in 32bits words
-   - 0010-002f : Z80 registers
+   - 0010-002f : Z80 registers (A,F,A',F',I,R,SP,PC,BC,DE,HL,IX,BC',DE',HL',IY,IM,IFF1,IFF2)
    - 0030-042F : Video Screen 
    - 0430-c42f : Main Memory (4000-ffff) 
 
@@ -60,7 +62,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
 
 ## System80 improved keyin routine
- * The included ROM contains Dick Smith System80 improved keyin routine at /12288 but it doesn't seem to work well (key repeat is too fast)
+ * The included ROM contains Dick Smith System80 improved keyin routine at /12288 but it doesn't seem to work well (key repeat is too fast at higher clock speeds)
  * Refer to the System80 manual for details about this.
 
 ## System80 Debugger in the ROM 
