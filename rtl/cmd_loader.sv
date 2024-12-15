@@ -66,20 +66,27 @@ module cmd_loader
     output logic [DATA-1:0] loader_data,    // Data to write to ram
 	 input  wire  [DATA-1:0] loader_din,	  // Data to read from ram
     output logic [ADDR-1:0] execute_addr,   // Start address for program start
-    output logic execute_enable,   	        // Jump to start address (out_execute_addr) - Not implemented
+    output logic execute_enable,   	        // Jump to start address (out_execute_addr) 
+	 input  wire  [1:0] execute_method,		  // How to call the program at the end of loading CAS/DOS/NONE
+	 input  wire [ADDR-1:0] exec_stack,
+    output logic [ADDR-1:0] dbg_min_addr,   // Start address for program start
+    output logic [ADDR-1:0] dbg_max_addr,   // Start address for program start
+	 
     output logic [31:0] iterations          // Used for debugging via SignalTap
 ); 
 
 //const bit [15:0] SYSTEM_ENTRY_LSB='h40DF;
 //const bit [15:0] SYSTEM_ENTRY_MSB='h40E0;
 
-typedef enum bit [4:0] {IDLE, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH, WAIT_M1, WAIT_M1_B, WAIT_M1_E, LOAD_REGS,
+typedef enum bit [4:0] {IDLE, GET_TYPE0, GET_TYPE, GET_LEN, GET_LSB, GET_MSB, SETUP, TRANSFER, EXECUTE, IGNORE, FINISH, 
+								WAIT_M1, WAIT_M1_B, WAIT_M1_E, LOAD_REGS, STACK2, STACK3,
 								LOAD_BASIC_S1, LOAD_BASIC_S2, LOAD_BASIC_S3, LOAD_BASIC_S4, LOAD_BASIC_S5, LOAD_BASIC_INSERT_CODE,
 								LOAD_BASIC, LOAD_BASIC_INSERT0, LOAD_BASIC_END, LOAD_BASIC_END2, SET_ZERO, DO_ZERO} loader_states;
 loader_states state;
 
 logic [8:0] block_len;
 logic [7:0] block_type;
+logic got_block ;
 logic [15:0] next_addr ; // ptr on the next pointer in bas file to edit later
 logic [15:0] prev_addr ; // ptr on the prev pointer in bas file to edit now
 logic [3:0] byte_ctr ; // logic counter
@@ -97,6 +104,7 @@ begin
 	if (reset)
 	begin
 		execute_enable <= 0;
+		got_block <= 0 ;
 		loader_addr <= '0;
 		execute_addr <= '0;
 		loader_data <= '0;
@@ -104,43 +112,72 @@ begin
 		loader_download <= 0;
 		ioctl_wait <= 0;
 		block_addr <= '0;
-        iterations <= 0;
-        first_block <= 0;
+      iterations <= 0;
+      first_block <= 0;
 		basic_ptr <= '0 ;
 		himem_ptr <= 16'hffff ;
+		dbg_max_addr<=16'h4000 ;
+		dbg_min_addr<=16'hffff ;
 	end 
 	else begin
 
 		loader_wr <= '0;
       iterations <= iterations + 32'd1;   // Used for debugging
-		if ( (state<FINISH) && (state != IDLE) && (cpum1=='0) ) loader_download <= 1;
+		// if ( (state<FINISH) && (state != IDLE) && (cpum1=='0) ) loader_download <= 1;
 		
 		case(state)
 			IDLE: begin 		// No transfer occurring
 				execute_enable <= 0;
-				ioctl_wait <= 0;				
+				ioctl_wait <= 0;		
 				if(ioctl_download && ioctl_index[5:0]==INDEX && ioctl_index[15:6]==0 && ioctl_addr == '0) begin  // index 2.0
 			//		loader_download <= 1;   // this will be done the next time M1 goes to 0, by the statement a few lines above
 													// because we can't wait unless we break the stream down here (that could be fixed later)
 													// and we CANNOT raise loader_download to stop the CPU if M1 is not low
-					state <= GET_TYPE;	
+					dbg_max_addr<=16'h4000 ;
+					dbg_min_addr<=16'hffff ;
+					state <= WAIT_M1 ;
+					ioctl_wait <= 1 ; 
+					if (ioctl_wr) begin
+						got_block <= 1 ;
+						block_type = ioctl_dout ;
+					end else got_block <= 0 ;
 				end else
 				if(ioctl_download && ioctl_index[5:0]==INDEX && ioctl_index[15:6]==1 && ioctl_addr == '0) begin  // index 2.1
-			//		loader_dbg <= { 1'd1, ioctl_addr[14:0] } ;
 					ioctl_wait<=1 ; 
 					state <= WAIT_M1_B;
+					if (ioctl_wr) begin
+						got_block <= 1 ;
+						block_type = ioctl_dout ;
+					end else got_block <= 0 ;
 				end 
 				else if (erase_mem) begin
 					state <= WAIT_M1_E;
+				end
+			end
+			WAIT_M1: begin
+				if (cpum1=='0) begin
+					loader_download <= 1;
+					state <= GET_TYPE0;	
+				end 
+				if (got_block == 0) begin
+					if (ioctl_wr) begin
+						got_block <= 1 ;
+						block_type = ioctl_dout ;
+					end
 				end
 			end
 			WAIT_M1_B: begin
 				if (cpum1=='0) begin
 					loader_addr <= 16'h40A4 ; // address of pointer to the Begining of basic in memory
 					loader_download <= 1;
-
 					state <= LOAD_BASIC_S1;
 				end 
+				if (got_block == 0) begin
+					if (ioctl_wr) begin
+						got_block <= 1 ;
+						block_type = ioctl_dout ;
+					end
+				end				
 			end
 			WAIT_M1_E: begin
 				if (cpum1=='0) begin
@@ -148,6 +185,19 @@ begin
 					state <= SET_ZERO;	
 				end 
 			end
+			
+			GET_TYPE0: begin		// very first block type
+				ioctl_wait <= 0 ;
+				if (got_block) begin
+					if(block_type ==8'd0) begin	// EOF
+						loader_download <= 0;
+						state <= IDLE;
+               end else state <= GET_LEN;
+				end else begin
+					state <= GET_TYPE ;
+				end
+			end
+
 			GET_TYPE: begin		// Start of transfer, load block type
 				if(ioctl_wr) begin
 					block_type <= ioctl_dout;
@@ -211,18 +261,20 @@ begin
 			TRANSFER: begin
                 if(block_len > 9'd0) begin
                     if(ioctl_wr) begin
-				//	loader_dbg <= { 1'd0, ioctl_addr[10:0] } ;
                         if (first_block) begin
                             loader_addr <= block_addr; 
                             first_block <= 0;
-                        end
+									if (dbg_min_addr>block_addr && block_addr >= 16'h4000) dbg_min_addr <= block_addr ;
+									if (dbg_max_addr<block_addr) dbg_max_addr <= block_addr ;
+                       end
                         else begin 
-                            loader_addr <= loader_addr + 16'd1;
-                        end
+                           loader_addr <= loader_addr + 16'd1; 
+									if (dbg_max_addr<=loader_addr) dbg_max_addr <= loader_addr + 16'd1 ;
+                       end
                         block_len <= block_len - 9'd1;
                         loader_data <= ioctl_dout;
                         loader_wr <= 1;
-    				end
+							end
                 end else begin	// Move to next block in chain
                     state <= GET_TYPE;
                     //ioctl_wait <= 1;
@@ -248,38 +300,55 @@ begin
             //loader_data <= block_addr[15:8];
             //loader_wr <= 1;
 				execute_addr <= block_addr;
-
             if(block_len > 2)  begin
               	state <= IGNORE; 
             end else begin
-               state <= LOAD_REGS; 
+					state <= LOAD_REGS; 
             end					
          end
 			LOAD_REGS: begin
-				execute_enable <= 1;	// toggle execute flag : note that we don't need the CPU clock for this to work
-				state <= FINISH ;
+				case (execute_method) 
+				2'b00, 
+				2'b01 :
+					begin
+						execute_enable <= 1; // toggle execute flag : note that we don't need the CPU clock for this to work**
+						state <= FINISH ;
+					end
+				2'b11 :		// Experimental, but it was disapointing. (push 402D on stack before jmping)
+					begin
+						loader_addr <= exec_stack-16'd1 ;
+						loader_data <= 8'h2D ; // prepare a return addr to 402Dh
+						loader_wr <= 1;
+						state <= STACK2 ;
+					end 
+				default:
+					state <= FINISH ;
+				endcase ;	
+			end
+			STACK2: begin
+				loader_addr <= exec_stack-16'd2;
+				loader_data <= 8'h40 ; // prepare a return addr to 042Dh
+				loader_wr <= 1;
+				state <= STACK3 ;
+			end
+			STACK3: begin
+				loader_wr <= 0;
+				state <= FINISH ;	
+				execute_enable <= 1;
 			end
 			FINISH: begin
-                loader_download <= 0; // free the CPU
-					 execute_enable <= 0;	// toggle execute flag back
-                state <= IDLE;
+               loader_download <= 0; // free the CPU
+					execute_enable <= 0;	// toggle execute flag back
+               state <= IDLE;
          end
 			LOAD_BASIC_S1: begin  // expect FF and read LSB(pointer to basic prg)
-					if(ioctl_wr) begin
-						if ((ioctl_dout == 8'h0ff && ioctl_addr == '0) || ioctl_addr == '1) begin
-	//						ioctl_wait <= 1 ;
+					if(got_block && block_type==8'hff) begin
 							loader_addr <= loader_addr + 16'd1; // MSB of pointer
 							state <= LOAD_BASIC_S2 ;
-						end else begin
-							// loader_dbg <= 16'h0fff1 ;  // ABORT
-							// loader_dbg <=  {ioctl_dout, ioctl_addr[7:0]} ;
+					end else begin // wrong basic FF header
 							state <= IDLE ;   // abort
 							ioctl_wait <= 0 ;
 							loader_download <= 0;
-						end
-					end else begin 
-							loader_addr <= loader_addr + 16'd1; // MSB of pointer
-							state <= LOAD_BASIC_S2 ;
 				   end
 			end
 			LOAD_BASIC_S2: begin // read LSB(pointer to basic prg)
@@ -306,11 +375,8 @@ begin
 						nullbytes <= 4'd0 ;
 						byte_ctr <= 4'd0 ;
 						prev_addr <= basic_ptr ;
-						// loader_dbg <=  basic_ptr;
 						state <= LOAD_BASIC ;
 					end else begin
-						// loader_dbg <= 16'h0fff2 ;
-						// loader_dbg <=  himem_ptr;
 						state <= FINISH ; // Incoherent pointers
 					end
 					ioctl_wait <= 0; // either case, let's roll the rest of the file
@@ -318,7 +384,6 @@ begin
 			LOAD_BASIC: begin
 				if(ioctl_wr) begin
 					loader_wr <= 1;
-					// loader_dbg <=  basic_ptr;
 					if (byte_ctr != 4'd4) byte_ctr <= byte_ctr + 4'd1 ;  // keep track of byte number in the line for the first bytes to skip ptr and line number
 					case (byte_ctr)
 						4'd0: begin
@@ -358,7 +423,6 @@ begin
 				if (~ioctl_download || loader_addr>himem_ptr) begin
 					state <= LOAD_BASIC_INSERT0 ;	
 					nullbytes <= 4'd0 ;
-					// loader_dbg <= 16'h0fff3 ; 
 				end
 			end
 			LOAD_BASIC_INSERT0: begin
@@ -389,7 +453,6 @@ begin
 						nullbytes <= 4'd1 ;  // 0+1
 						loader_addr <= 16'h40f9 ;
 						prev_addr <= loader_addr ;
-						// loader_dbg <= loader_addr ;
 						loader_data <= loader_addr[7:0];
 						state <= LOAD_BASIC_END ;
 					end
@@ -408,7 +471,6 @@ begin
 			SET_ZERO: begin
 				loader_addr <= 16'h4000 ; // erase memory from 4000 to FFFF
 				state <= DO_ZERO ;
-				// loader_dbg <= '0 ;
 			end
 			DO_ZERO: begin
 				if (loader_addr == 16'h0fffd) begin  // allow a few cycles for the CPU to get the REGset signal
@@ -445,7 +507,7 @@ begin
 				end
 			end
 		endcase
-        // Increment iteration counter
+
         // Reset back when ioctl download ends
 		  // If ioctl_download drops and we are in a state waiting for wr strobes, something is going wrong, so reset.
 		  // If we are not in state waiting for data, or in a state expecting ioctl_download to drop, lets continue the normal work.

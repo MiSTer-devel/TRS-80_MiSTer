@@ -191,7 +191,7 @@ assign LED_USER  = ioctl_download;
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -201,21 +201,24 @@ localparam CONF_STR = {
  	"S2,DSKJV1,Mount Disk 2:;",
  	"S3,DSKJV1,Mount Disk 3:;",
 	"-;",
-//	"F4,*,Upload File(s);",
 	"F2,CMDBAS,Load Program;",
 	"F1,CAS,Load Cassette;",
+	"OLM,CMD Exec Method,CAS,JMP,NONE;",
 	"-;",
 	"FS3,SAV,Snapshot;",
-	"OJK,Savestate Slot,1,2,3,4;",
-	"RH,Load State;",
-	"RI,Save State;",
+	"D1OJK,Savestate Slot,1,2,3,4;",
+	"D1RH,Load State;",
+	"D1RI,Save State;",
 	"-;",
-	"O56,Screen Color,White,Green,Amber;",
-	"OE,Video Flicker,Off,On;",
-	"O7,Lowercase Type,Normal,Symbol;",
-	"OCD,Overscan,None,Partial,Full;",
-	"OF,Overscan Status Line,Off,On;",
-	"O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"P1,Display Options;",
+	"P1-,Display Options;",
+	"P1-;",
+	"P1O56,Screen Color,White,Green,Amber;",
+	"P1OE,Video Flicker,Off,On;",
+	"P1O7,Lowercase Type,Normal,Symbol;",
+	"P1OCD,Overscan,None,Partial,Full;",
+	"P1OF,Overscan Status Line,Off,On;",
+	"P1O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
@@ -236,6 +239,7 @@ pll pll
 );
 
 wire [31:0] status;
+wire [15:0] menumask ;
 wire  [1:0] buttons;
 wire			cpum1;
 wire        ioctl_download;
@@ -281,6 +285,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 	.gamma_bus(gamma_bus),
 
 	.status(status),
+	.status_menumask(menumask),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -317,7 +322,29 @@ wire [7:0] loader_data;
 wire [15:0] execute_addr;
 wire execute_enable;
 wire loader_wait;
+wire debug_select_line ; 
+wire prev_status_15 ;
+wire [15:0] dgb_min_addr;
+wire [15:0] dgb_max_addr;
+wire [15:0] prev_execute_addr;
+
 //(* preserve *) wire [31:0] iterations;
+always_ff @(posedge clk_sys or posedge reset) begin
+	if (reset) begin
+		debug_select_line <= 1'b0 ; 
+		prev_execute_addr <= 16'h0000 ;
+		if (rom_download) menumask[1] <= 1'b1 ;
+	end else
+	begin
+		prev_status_15 <= status[15] ;
+		prev_execute_addr <= execute_addr ;
+		if ( (status[15] != prev_status_15) && (status[15] == 1'b0) ) begin // reset status line if OSD request to see debug
+			debug_select_line <= ! debug_select_line  ;
+		end
+		if (execute_addr != prev_execute_addr) debug_select_line <= 1'b1 ;  // if exec_addr change, see it.
+		if (ioctl_download && ioctl_wr && ioctl_index==3 && ioctl_addr[0] == 1'b1 ) menumask[1] <= 1'b0 ;
+	end
+end
 
 cmd_loader cmd_loader
 (
@@ -339,7 +366,13 @@ cmd_loader cmd_loader
 	.loader_data(loader_data),
 	.loader_din(trsram_din),
 	.execute_addr(execute_addr),
-	.execute_enable(execute_enable)
+	.execute_enable(execute_enable),
+	.execute_method(status[22:21]),
+	.exec_stack(exec_stack),
+	.dbg_min_addr(dgb_min_addr),
+	.dbg_max_addr(dgb_max_addr)
+	
+	
 //	.iterations(iterations)		// Debugging only
 );
 
@@ -349,6 +382,10 @@ wire trsram_download;	// Download in progress (active high)
 wire [23:0] trsram_addr;
 wire [7:0] trsram_data;
 wire [7:0] trsram_din;
+
+wire [15:0] dbg_min_addr ;
+wire [15:0] dbg_max_addr ;
+wire [15:0] exec_stack ;
 
 assign trsram_wr = loader_download ? loader_wr : |ioctl_index[5:1]==1'b0 ?  ioctl_wr : 1'b0 ; // we don't want a spurious write if loader_download is late
 assign trsram_rd = loader_download ;
@@ -412,6 +449,11 @@ trs80 trs80
 	.loader_download(loader_download),
 	.execute_addr(execute_addr),
 	.execute_enable(execute_enable),
+	.execute_method(status[22:21]),
+	.debug_select_line(debug_select_line),
+	.exec_stack(exec_stack),
+	.dbg_min_addr(dgb_min_addr),
+	.dbg_max_addr(dgb_max_addr),
 
 	.img_mounted(img_mounted),
 	.img_readonly(img_readonly),

@@ -42,6 +42,8 @@ module z80_regset
 (
     input wire [15:0] execute_addr,     // Start address for program start
     input wire execute_enable,   	    // Jump to start address (out_execute_addr) - Not implemented
+    input wire [1:0] execute_method,   	    // Jump to start address (out_execute_addr) - Not implemented
+	 input wire [15:0] REG_SP_ADDR,		 // Stack pointer from REG CPU
     //input wire [211:0] dir_in,       // Z80 Register set as defined in T80pa / T80
 
     output logic [211:0] dir_out,       // Z80 Register set as defined in T80pa / T80
@@ -57,8 +59,7 @@ begin
         //dir_in[211:80],
         execute_addr[15:8], // 079-072 - PCH
         execute_addr[7:0],  // 071-064 - PCL
-        SP_ADDR[15:8],      // 063-056 - SPH
-        SP_ADDR[7:0],       // 055-048 - SPL
+        execute_method==2'b00 ? SP_ADDR[15:0] : execute_method==2'b11 ? REG_SP_ADDR-16'd2 : REG_SP_ADDR,      // 063-048 - SP
         //dir_in[47:0]
         8'b0,               // 047-040 - R
         8'b0,               // 039-032 - I
