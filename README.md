@@ -20,7 +20,7 @@ Note: The cassette loader has a special feature allowing you to load a ZIP file 
 ### To load a CMD file:
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
 3 options for the final transfer to the program are proposed by an OSD choice :
- * CAS : This is the default, for CMD files coming from cassette dumps. It sets up the stack to 0x4000 before jumping to the program entry
+ * CAS : This is the default, for CMD files coming from cassette dumps. It sets up the stack to 0x4200 before jumping to the program entry
  * JMP : just JMP to the program entry and let the stack alone
  * NONE: Only loads the program in memory. It's up to the user to JMP to the program entry by another mean. It's the safest way to load and run a CMD file under DOS !
 
