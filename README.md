@@ -5,7 +5,7 @@ This is a port of [HT1080Z MiST core](https://github.com/mist-devel/ht1080z) by 
 To learn how to use the TRS-80, this is a quick tutorial:
 https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
-The TRS-80 will boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
+The TRS-80 with boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
 
 ### To load a cassette game:
 ```
@@ -19,9 +19,19 @@ Note: The cassette loader has a special feature allowing you to load a ZIP file 
 
 ### To load a CMD file:
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
+3 options for the final transfer to the program are proposed by an OSD choice :
+ * CAS : This is the default, for CMD files coming from cassette dumps. It sets up the stack to 0x4200 before jumping to the program entry
+ * JMP : just JMP to the program entry and let the stack alone
+ * NONE: Only loads the program in memory. It's up to the user to JMP to the program entry by another mean. It's the safest way to load and run a CMD file under DOS !
+
+The Debug Message (you need to enable it to be able to see it, as explained below) will show the area where the program has been loaded and its entry point.
+Under DOS, an easy way to JMP to the entry point is to create a simple Loader like so :
+ * DUMP RUN7000/CMD (TRA=X'7000')
+ * at the DOS prompt, typing "RUN7000<enter>" will then jump to hex addr 0x7000.
 
 ### To load a BAS file:
-Only basic Level II programs can be loaded. Load Basic (with or without a DOS) and once at the prompt ">" select a \*.bas file from the OSD. Use "LIST" or "RUN" to see and start the program as usual. 
+You can load Level I or II programs, but only in binary format. Text files must be loaded via the "MERGE" command only. Basic Level II (Disk version or not) should be in memory so the loader knows where to put things.
+Load Basic (with or without a DOS) and once at the prompt ">" select a \*.bas file from the OSD. Use "LIST" or "RUN" to see and start the program as usual. 
 
 ### To load files from DSK images:
 There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they all usually share the same DSK extension.  This MiSTer Core only supports the JV1 image format with upto 240 tracks, all tracks must currently hold 10 x 256 byte sectors.  To check what format a disk is in, and if it is compatible with the core, use the TRSTOOLS utility from Matthew Reed, available from: http://www.trs-80emulators.com/trstools/
@@ -42,7 +52,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
 
 ## How to use the Saved States
  * You must first create "rom_names" each virtually containing 4 saved states numbered from 1 to 4 and selected in the OSD
- * To create these "rom_names" just put a non-empty file with a .SAV extension anywhere, but preferably in games/TRS-80
+ * To create these "rom_names" just put a non-empty file with a .SAV extension anywhere, but preferably in games/TRS-80. The OSD options will be disabled until you select a "rom_name" file.
  * An easy linux/MiSTer command to do this is : echo "A">/media/fat/games/TRS-80/MySave001.SAV
  * You can create as many save "rom_names" as you want, they are just needed to define the "rom_name" under which the savestates are saved, and they are not used.
  * Use the OSD to select a slot with the "Snapshot "\*.SAV" OSD entry, and a state number from the "Savestate slot" OSD entry 

@@ -392,7 +392,7 @@ signal pthdisp,ptvdisp : std_logic;	-- '1' if inside 'partial overscan' dislpay 
 signal border : std_logic_vector(3 downto 0) := "0000";
 signal  paper : std_logic_vector(3 downto 0) := "0000";
 signal    ink : std_logic_vector(3 downto 0) := "1000";
-signal dashbrd : std_logic_vector(3 downto 0) := "1011";  -- debug yellow color
+CONSTANT dashbrd : std_logic_vector(3 downto 0) := "1011";  -- debug yellow color
 
 signal  vid_addr : std_logic_vector(9 downto 0);
 

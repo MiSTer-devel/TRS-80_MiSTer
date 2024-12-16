@@ -86,7 +86,7 @@ wire [31:0] CLK_EN = (SYS_CLK / 1000)/clk_div;	// Clock in Khz adjusted for CPU 
 
 // Percom and TRS-80 DD handler
 logic controller_type; // 0=1771(SD), 1=1791(DD)
-logic old_trsdd_enable;
+// logic old_trsdd_enable;
 always @(posedge clk_sys) begin
 	if(!floppy_reset) begin
 		controller_type <= 1'b0;
@@ -153,8 +153,8 @@ reg  [22:0] mounted_size[4] ; // size of mounted image per slot, in sectors
 reg   [3:0] doubleside;
 reg   [7:0] hd;
 
-wire [11:0] image_sectors = controller_type ? img_size[20:9] : img_size[19:8] /* synthesis keep */; // SE - Adjusted for 256 byte sectors
-reg  [11:0] image_sps; // sectors/side
+// wire [11:0] image_sectors = controller_type ? img_size[20:9] : img_size[19:8] /* synthesis keep */; // SE - Adjusted for 256 byte sectors
+// reg  [11:0] image_sps; // sectors/side
 reg   [4:0] image_spt; // sectors/track
 reg   [9:0] image_gap_len;
 reg         image_doubleside;
@@ -170,7 +170,7 @@ always @(*) begin
 //	end else begin
 		// this block is valid for the .st format (or similar arrangement)
 		image_doubleside = 1'b0;
-		image_sps = image_sectors;
+// 		image_sps = image_sectors;
 //		if ( (sector_size_code != 1) && (image_sectors > (80*10)) ) begin 
 		// don't do this for TRS80
 //			image_doubleside = 1'b1;
@@ -1198,7 +1198,7 @@ end
 reg cmd_rx /* verilator public */;
 // reg cmd_rx_i;
 reg data_in_strobe;
-reg trsdd_enable;	// TRS-Disk Doubler
+// reg trsdd_enable;	// TRS-Disk Doubler
 
 always @(posedge clk_sys) begin
 	if(!floppy_reset) begin
@@ -1211,7 +1211,7 @@ always @(posedge clk_sys) begin
 		// cmd_rx_i <= 1'b0;
 		cmd_rx <= 1'b0;
 		data_in_strobe <= 0;
-		trsdd_enable <= 1'b0;
+		// trsdd_enable <= 1'b0;
 	end else begin
 		data_in_strobe <= 0;
 
