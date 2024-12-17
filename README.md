@@ -46,9 +46,10 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * SavedStates
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
- * Cassette loading is many times faster than the original 500 baudi
- * direct ZIP/UNZIP download feature
+ * Cassette loading is many times faster than the original 500 bauds
+ * direct ZIP/UNZIP download feature (look in the support files for MrUnzip)
  * Ctrl Key simulates shift-DownArrow
+ * TRS-80 Skin (only visible if an overscan is selected)
 
 ## How to use the Saved States
  * You must first create "rom_names" each virtually containing 4 saved states numbered from 1 to 4 and selected in the OSD
@@ -83,7 +84,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
 Debug status line
  * The Debug Status line will only be visible in Partial or Full overscan modes
    * For monitoring Floppy Disk Controller (FDC)
-   * Usess the following format: Ddddd,Ccc,Ttt,Sss,dnn,sSS,Xxxxx \* where:
+   * Uses the following format: Ddddd,Ccc,Ttt,Sss,dnn,sSS,Xxxxx \* where:
      * dddd - Drive select latch (1-4).  Only 2 drives are currently supported
      * cc   - FDC Command Register
      * tt   - FDC Track Register

@@ -45,12 +45,13 @@ use IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity videoctrl is
 	Generic (
-		H_START : integer := 165;		-- (630-384)/2 + 42
+		H_START : integer := 165;		-- (630-384)/2 + 42   165
 		V_START : integer := 37			-- (260-192)/2 + 3
 	 );
     Port (   
 		reset     : in  STD_LOGIC;
-		clk42     : in  STD_LOGIC;
+		clk42     : in  STD_LOGIC;		
+		skin      : in  STD_LOGIC;
 		a         : in  STD_LOGIC_VECTOR (13 downto 0);
 		din       : in  STD_LOGIC_VECTOR (7 downto 0);
 		dout      : out STD_LOGIC_VECTOR (7 downto 0);
@@ -58,7 +59,8 @@ entity videoctrl is
 		debug_enable : in STD_LOGIC;
 		dbugmsg_addr : out STD_LOGIC_VECTOR (5 downto 0);
 		dbugmsg_data : in STD_LOGIC_VECTOR (7 downto 0);
-
+		v_debug      : out  STD_LOGIC;
+		
 		mreq      : in  STD_LOGIC;
 		iorq      : in  STD_LOGIC;
 		wr        : in  STD_LOGIC;
@@ -75,7 +77,10 @@ entity videoctrl is
 		hsync     : out STD_LOGIC;
 		vsync     : out STD_LOGIC;
 		hb        : out STD_LOGIC;
-		vb        : out STD_LOGIC
+		vb        : out STD_LOGIC;
+		
+		img_rgb	 : out STD_LOGIC_VECTOR (31 downto 0); -- R-G-B 8bits x 3
+		img_valid : out STD_LOGIC 
 		);
 end videoctrl;
 
@@ -381,8 +386,11 @@ signal vctr    : std_logic_vector(8 downto 0);
 signal vpos    : std_logic_vector(3 downto 0); -- line pos in a chr 0..11
 signal hpos    : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
 
-signal ce      : std_logic;
+signal img_hact, img_vact : std_logic;
+signal img_hctr : std_logic_vector(8 downto 0);
+signal img_vctr : std_logic_vector(7 downto 0);
 
+signal ce      : std_logic;
 signal vdebug  : std_logic;
 
 signal hact,vact : std_logic;			-- '1' if inside active display area
@@ -434,10 +442,27 @@ CONSTANT  ptlvend : std_logic_vector(8 downto 0) := conv_std_logic_vector(243,9)
 
 begin
 
-hstart <= conv_std_logic_vector(H_START,10);
+hstart <= conv_std_logic_vector(110,10) when skin='1' else conv_std_logic_vector(H_START,10) ;
 vstart <= conv_std_logic_vector(V_START,9);
 
 ce_pix <= ce;
+v_debug <= vdebug ;
+
+skin_rom_inst : entity work.sprom
+generic map
+(
+		 init_file => "rtl/skin2.mif",
+		 widthad_a => 16,
+		 width_a => 32
+)
+port map
+(
+		 clock           => clk42,
+		 address => (img_vctr & x"00")+(img_vctr & "0000000")+img_hctr,
+		 q    => img_rgb
+);
+
+
 
 process(clk42)
 begin
@@ -547,7 +572,7 @@ begin
 			if hctr=hend then
 				hctr<=(others=>'0');
 				vctr<=vctr+1;
-				if vctr>=vend then
+				if vctr=vend then
 					vctr<=(others=>'0');
 				end if;
 			end if;
@@ -582,6 +607,11 @@ vdisp <= '1' when vctr>=vsynlen and vctr<vend else '0';
 
 pthdisp <= '1' when hctr>=ptlhstrt and hctr<ptlhend else '0';
 ptvdisp <= '1' when vctr>=ptlvstrt and vctr<ptlvend else '0';
+
+img_hact <= '1' when hctr>=512 and hctr<608 else '0' ;
+img_vact <= '1' when vctr>=40 and vctr<160 else '0' ; 
+
+img_valid <= '1' when img_hact='1' and img_vact='1' and skin='1' else '0' ;
 
 process(clk42)
 begin
@@ -626,7 +656,8 @@ begin
 					-- new frame
 					vaVert<= "0000";
 					vpos <= "0000";
-
+					img_vctr <= (others=>'0')  ;
+					
 				elsif (vact='1' or vdebug='1') and hctr=hstart+hsize+2 then  
 					-- end of a scanline
 					if vpos=11 then
@@ -639,7 +670,20 @@ begin
 					end if;
 				end if;
 			end if;
+			if (hctr=511) then 
+				img_hctr<=(others=>'0')  ;
+				if (vctr=39) then 
+					img_vctr<=(others=>'0')  ; 
+				else 
+					img_vctr<=img_vctr+1 ; 
+				end if ;
+			end if;
+			
 		end if;
+		-- clock*4 here for Hires Skin pict
+		if (hctr>511) then 
+			img_hctr<=img_hctr+1 ;
+		end if ;
 	end if;
 end process;
 

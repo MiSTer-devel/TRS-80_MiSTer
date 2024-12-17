@@ -51,12 +51,13 @@ Port (
 	clk42m     : in  STD_LOGIC;
 	cpum1_out  : out STD_LOGIC;
 
-	RGB        : out STD_LOGIC_VECTOR (17 downto 0);
+	RGB        : out STD_LOGIC_VECTOR (23 downto 0);
 	HSYNC      : out STD_LOGIC;
 	VSYNC      : out STD_LOGIC;
 	hblank     : out STD_LOGIC;
 	vblank     : out STD_LOGIC;
 	ce_pix     : out STD_LOGIC;
+	skin		  : in STD_LOGIC;
 
 	LED        : out STD_LOGIC;
 
@@ -359,6 +360,7 @@ signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo, kbdout, video_dout: std_logic_vector(7 downto 0);
 signal video_addr : std_logic_vector(13 downto 0);
 signal video_wr : std_logic;
+signal img_valid  : STD_LOGIC;
 
 signal Fn : std_logic_vector(11 downto 0);
 signal modif : std_logic_vector(2 downto 0);
@@ -393,7 +395,7 @@ signal dbugmsg_addr  : STD_LOGIC_VECTOR (5 downto 0);
 signal dbugmsg_data  : STD_LOGIC_VECTOR (7 downto 0);  -- debug message
 signal dbugldr_data  : STD_LOGIC_VECTOR (7 downto 0);  -- Loader message
 signal dbugmsg_video : STD_LOGIC_VECTOR (7 downto 0);  -- debug message selector
-
+signal v_debug			: std_logic;
 
 signal io_ram_addr	: std_logic_vector(23 downto 0);
 signal iorrd,iorrd_r	: std_logic;
@@ -490,6 +492,7 @@ signal widemode_r, widemode_s : std_logic ;
 
 signal ss_ram_addr : std_logic_vector(15 downto 0);
 -- signal ss_debug_ctr : std_logic_vector(15 downto 0);
+signal img_rgb : std_logic_vector(31 downto 0);
 
 begin
 
@@ -846,6 +849,7 @@ port map
 (
 	reset => not reset,
 	clk42 => clk42m,
+	skin => skin,
 	a => video_addr,
 	din => video_dout,
 	dout => vramdo,
@@ -853,6 +857,7 @@ port map
 	debug_enable => debug,			-- Enable to show disk debugging
 	dbugmsg_addr => dbugmsg_addr,
 	dbugmsg_data => dbugmsg_video,
+	v_debug => v_debug,
 
 	mreq => cpumreq,
 	iorq => cpuiorq,
@@ -870,7 +875,10 @@ port map
 	hsync => hsync,
 	vsync => vsync,
 	hb => hblank,
-	vb => vblank
+	vb => vblank,
+	
+	img_rgb => img_rgb,
+	img_valid => img_valid
 );
 
 
@@ -1071,10 +1079,12 @@ with rgbi select ht_rgb_amber <=
 
 
 RGB <=
-	ht_rgb_white when disp_color = "00" else
-	ht_rgb_green when disp_color = "01" else
-	ht_rgb_amber when disp_color = "10" else
-	"111110111110111110";
+   img_rgb(15 downto 8) & img_rgb(23 downto 16) & img_rgb(31 downto 24) when img_valid='1' else
+	"000000001111001111110011" when v_debug='1' and rgbi="1011" else
+	ht_rgb_white(17 downto 12) & ht_rgb_white(17 downto 16) & ht_rgb_white(11 downto 6) & ht_rgb_white(11 downto 10) & ht_rgb_white(5 downto 0) & ht_rgb_white(5 downto 4) when disp_color = "00" else
+	ht_rgb_green(17 downto 12) & ht_rgb_green(17 downto 16) & ht_rgb_green(11 downto 6) & ht_rgb_green(11 downto 10) & ht_rgb_green(5 downto 0) & ht_rgb_green(5 downto 4) when disp_color = "01" else
+	ht_rgb_amber(17 downto 12) & ht_rgb_amber(17 downto 16) & ht_rgb_amber(11 downto 6) & ht_rgb_amber(11 downto 10) & ht_rgb_amber(5 downto 0) & ht_rgb_amber(5 downto 4) when disp_color = "10" else
+	"111110111111101111111011";
 
 main_mem : dpram
 generic map (
