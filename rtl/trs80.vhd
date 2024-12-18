@@ -108,11 +108,11 @@ Port (
 	sd_buff_din  	: out std_logic_vector(7 downto 0);
 	sd_dout_strobe 	: in std_logic;
 
-	UART_TXD       :out  std_logic;
+	UART_TXD       :buffer  std_logic;
 	UART_RXD       :in  std_logic;
-	UART_RTS       :out  std_logic;
+	UART_RTS       :buffer  std_logic;
 	UART_CTS       :in  std_logic;
-	UART_DTR       :out  std_logic;
+	UART_DTR       :buffer  std_logic;
 	UART_DSR       :in  std_logic;
 	
 	uart_mode	   :in std_logic_vector(7 downto 0);
@@ -283,7 +283,11 @@ component fdc1771 is
 			sector_out		: out  std_logic_vector(7 downto 0);	
 			data_in_out		: out  std_logic_vector(7 downto 0);	
 			status_out		: out  std_logic_vector(7 downto 0);
-			spare_out		: out  std_logic_vector(15 downto 0)   -- spare for debugging other stuff FLYNN
+			spare_out		: out  std_logic_vector(15 downto 0);   -- spare for debugging other stuff FLYNN
+			
+			UI_floppy_ready : out std_logic_vector(3 downto 0);
+			UI_floppy_write : out std_logic_vector(3 downto 0);
+			UI_floppy_read : out std_logic_vector(3 downto 0)
 		);
 end component ;
 
@@ -460,6 +464,11 @@ type motor_state is (stopped, spinup, running);
 signal fdc_motor_state : motor_state;
 signal fdc_motor_on : std_logic := '0';
 signal fdc_motor_countdown : integer := 0;
+-- UI floppy
+signal UI_floppy_ready : std_logic_vector(3 downto 0);
+signal UI_floppy_write : std_logic_vector(3 downto 0);
+signal UI_floppy_read : std_logic_vector(3 downto 0);
+
 -- debugging counter
 signal counter : std_logic_vector(31 downto 0) := (others => '0');  -- Used for debugging via SignalTap
 attribute noprune: boolean; 
@@ -703,7 +712,11 @@ port map
 	sector_out => dbg_sector,
 	data_in_out => dbg_data_in,
 	status_out => dbg_status,
-	spare_out => dbg_spare
+	spare_out => dbg_spare,
+	
+	UI_floppy_ready => UI_floppy_ready,
+	UI_floppy_write => UI_floppy_write,
+	UI_floppy_read => UI_floppy_read
 
 );
 
@@ -878,7 +891,17 @@ port map
 	vb => vblank,
 	
 	img_rgb => img_rgb,
-	img_valid => img_valid
+	img_valid => img_valid,
+	
+	UI_floppy_ready => UI_floppy_ready,
+	UI_floppy_write => UI_floppy_write,
+	UI_floppy_read => UI_floppy_read,
+	UART_RX => UART_RXD,
+	UART_TX => UART_TXD,
+	UART_RTS => UART_RTS,
+	UART_CTS => UART_CTS,
+	UART_DTR => UART_DTR,
+	UART_DSR => UART_DSR
 );
 
 
