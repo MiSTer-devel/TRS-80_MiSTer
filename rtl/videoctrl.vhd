@@ -502,9 +502,9 @@ img_adr_flp <=  img_vctr when img_adr_rdy else img_vctr+28 ;
 											
 img_led_state <= conv_std_logic_vector(96,9)  when not img_adr_rdy else
 					  conv_std_logic_vector(32,9) when (UI_floppy_write(0)='1' and img_dr1='1') or (UI_floppy_write(1)='1' and img_dr2='1') 
-							 or (UI_floppy_write(2)='1' and img_dr3='1') or (UI_floppy_write(3)='1' and img_dr3='1') else
+							 or (UI_floppy_write(2)='1' and img_dr3='1') or (UI_floppy_write(3)='1' and img_dr4='1') else
 					  conv_std_logic_vector(0,9)  when (UI_floppy_read(0)='1' and img_dr1='1') or (UI_floppy_read(1)='1' and img_dr2='1') 
-							 or (UI_floppy_read(2)='1' and img_dr3='1') or (UI_floppy_read(3)='1' and img_dr3='1') else											
+							 or (UI_floppy_read(2)='1' and img_dr3='1') or (UI_floppy_read(3)='1' and img_dr4='1') else											
 						conv_std_logic_vector(64,9) ;	
 						
 img_rs232_state <= conv_std_logic_vector(96,9) when (img_led232_1='1' and UART_RX='1') or (img_led232_2='1' and UART_TX='1') or (img_led232_3='1' and UART_RTS='1') or
