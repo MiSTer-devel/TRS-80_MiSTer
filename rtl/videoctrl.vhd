@@ -45,12 +45,13 @@ use IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity videoctrl is
 	Generic (
-		H_START : integer := 165;		-- (630-384)/2 + 42
+		H_START : integer := 165;		-- (630-384)/2 + 42   165
 		V_START : integer := 37			-- (260-192)/2 + 3
 	 );
     Port (   
 		reset     : in  STD_LOGIC;
-		clk42     : in  STD_LOGIC;
+		clk42     : in  STD_LOGIC;		
+		skin      : in  STD_LOGIC;
 		a         : in  STD_LOGIC_VECTOR (13 downto 0);
 		din       : in  STD_LOGIC_VECTOR (7 downto 0);
 		dout      : out STD_LOGIC_VECTOR (7 downto 0);
@@ -58,7 +59,8 @@ entity videoctrl is
 		debug_enable : in STD_LOGIC;
 		dbugmsg_addr : out STD_LOGIC_VECTOR (5 downto 0);
 		dbugmsg_data : in STD_LOGIC_VECTOR (7 downto 0);
-
+		v_debug      : out  STD_LOGIC;
+		
 		mreq      : in  STD_LOGIC;
 		iorq      : in  STD_LOGIC;
 		wr        : in  STD_LOGIC;
@@ -75,7 +77,20 @@ entity videoctrl is
 		hsync     : out STD_LOGIC;
 		vsync     : out STD_LOGIC;
 		hb        : out STD_LOGIC;
-		vb        : out STD_LOGIC
+		vb        : out STD_LOGIC;
+		
+		img_rgb	 : out STD_LOGIC_VECTOR (31 downto 0); -- R-G-B 8bits x 3
+		img_valid : out STD_LOGIC ;
+		
+		UI_floppy_ready : in STD_LOGIC_VECTOR (3 downto 0) ;
+		UI_floppy_write : in STD_LOGIC_VECTOR (3 downto 0) ;
+		UI_floppy_read : in STD_LOGIC_VECTOR (3 downto 0);
+		UART_RX   : in  STD_LOGIC;
+		UART_TX   : in  STD_LOGIC;
+		UART_RTS  : in  STD_LOGIC;
+		UART_CTS  : in  STD_LOGIC;
+		UART_DTR  : in  STD_LOGIC;
+		UART_DSR  : in  STD_LOGIC
 		);
 end videoctrl;
 
@@ -381,8 +396,34 @@ signal vctr    : std_logic_vector(8 downto 0);
 signal vpos    : std_logic_vector(3 downto 0); -- line pos in a chr 0..11
 signal hpos    : std_logic_vector(2 downto 0); -- pixel pos in a chr 0..5
 
-signal ce      : std_logic;
+signal img_hact, img_vact : std_logic;
+signal img_hctr, img_hctr_led : std_logic_vector(8 downto 0);
+signal img_vctr, img_adr_logo, img_adr_led_rs, img_adr_rs232 : std_logic_vector(7 downto 0);
+signal img_adr_flp : std_logic_vector(7 downto 0);
+signal img_address : std_logic_vector(15 downto 0);
 
+signal img_logo, img_rs232 : std_logic;
+signal img_dr1 : std_logic;
+signal img_dr2 : std_logic;
+signal img_dr3 : std_logic;
+signal img_dr4 : std_logic;
+
+signal img_led_col : std_logic ;
+signal img_adr_led : std_logic_vector(7 downto 0);
+signal img_led_state : std_logic_vector(8 downto 0);
+signal img_rs232_state : std_logic_vector(8 downto 0);
+signal img_adr_rdy : boolean ;
+signal img_led_1 : std_logic;
+signal img_led_2 : std_logic;
+signal img_led_3 : std_logic;
+signal img_led_4 : std_logic;
+
+signal img_hctr_led_rs1, img_hctr_led_rs2, img_hctr_led_rs3, img_hctr_led_rs4, img_hctr_led_rs5, img_hctr_led_rs6 : std_logic_vector(8 downto 0);
+signal img_led232_col1, img_led232_col2, img_led232_col3, img_led232_col4, img_led232_col5, img_led232_col6 : std_logic ;
+signal img_led232_1, img_led232_2, img_led232_3, img_led232_4, img_led232_5, img_led232_6 : std_logic ;
+signal img_led232_row : std_logic ;
+
+signal ce      : std_logic;
 signal vdebug  : std_logic;
 
 signal hact,vact : std_logic;			-- '1' if inside active display area
@@ -434,10 +475,71 @@ CONSTANT  ptlvend : std_logic_vector(8 downto 0) := conv_std_logic_vector(243,9)
 
 begin
 
-hstart <= conv_std_logic_vector(H_START,10);
+hstart <= conv_std_logic_vector(110,10) when skin='1' else conv_std_logic_vector(H_START,10) ;
 vstart <= conv_std_logic_vector(V_START,9);
 
 ce_pix <= ce;
+v_debug <= vdebug ;
+
+img_adr_logo <= img_vctr+72 ;
+img_adr_rs232 <= img_vctr+61 ;
+img_adr_led_rs <= img_vctr+48 ;  -- LEDs-5
+img_adr_led <= img_vctr+50 ;  -- LEDs-3
+img_hctr_led <= img_hctr-33 ;
+img_hctr_led_rs1 <= img_hctr-16 ;
+img_hctr_led_rs2 <= img_hctr-80 ;
+img_hctr_led_rs3 <= img_hctr-144 ;
+img_hctr_led_rs4 <= img_hctr-208 ;
+img_hctr_led_rs5 <= img_hctr-272 ;
+img_hctr_led_rs6 <= img_hctr-336 ;
+
+img_adr_rdy <=  (UI_floppy_ready(0)='1' and img_dr1='1')  or 
+											(UI_floppy_ready(1)='1' and img_dr2='1')  or
+											(UI_floppy_ready(2)='1' and img_dr3='1')  or
+											(UI_floppy_ready(3)='1' and img_dr4='1') ;
+											
+img_adr_flp <=  img_vctr when img_adr_rdy else img_vctr+28 ;
+											
+img_led_state <= conv_std_logic_vector(96,9)  when not img_adr_rdy else
+					  conv_std_logic_vector(32,9) when (UI_floppy_write(0)='1' and img_dr1='1') or (UI_floppy_write(1)='1' and img_dr2='1') 
+							 or (UI_floppy_write(2)='1' and img_dr3='1') or (UI_floppy_write(3)='1' and img_dr4='1') else
+					  conv_std_logic_vector(0,9)  when (UI_floppy_read(0)='1' and img_dr1='1') or (UI_floppy_read(1)='1' and img_dr2='1') 
+							 or (UI_floppy_read(2)='1' and img_dr3='1') or (UI_floppy_read(3)='1' and img_dr4='1') else											
+						conv_std_logic_vector(64,9) ;	
+						
+img_rs232_state <= conv_std_logic_vector(96,9) when (img_led232_1='1' and UART_RX='1') or (img_led232_2='1' and UART_TX='1') or (img_led232_3='1' and UART_RTS='1') or
+								(img_led232_4='1' and UART_CTS='1') or (img_led232_5='1' and UART_DTR='1') or (img_led232_6='1' and UART_DSR='1') else conv_std_logic_vector(0,9) ;
+											
+img_address <= (img_adr_logo & x"00")+(img_adr_logo & "0000000")+img_hctr when img_logo='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs1+img_rs232_state when img_led232_1='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs2+img_rs232_state when img_led232_2='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs3+img_rs232_state when img_led232_3='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs4+img_rs232_state when img_led232_4='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs5+img_rs232_state when img_led232_5='1' else
+					(img_adr_led_rs & x"00")+(img_adr_led_rs & "0000000")+img_hctr_led_rs6+img_rs232_state when img_led232_6='1' else
+					(img_adr_rs232 & x"00")+(img_adr_rs232 & "0000000")+img_hctr when img_rs232='1' else
+						(img_adr_led & x"00")+(img_adr_led & "0000000")+img_hctr_led+img_led_state 
+								when img_led_1='1' or img_led_2='1' or img_led_3='1' or img_led_4='1' else
+						(img_adr_flp & x"00")+(img_adr_flp & "0000000")+img_hctr when img_dr1='1' else
+						(img_adr_flp & x"00")+(img_adr_flp & "0000000")+img_hctr when img_dr2='1' else
+						(img_adr_flp & x"00")+(img_adr_flp & "0000000")+img_hctr when img_dr3='1' else
+						(img_adr_flp & x"00")+(img_adr_flp & "0000000")+img_hctr when img_dr4='1' else x"0000" ;
+						
+skin_rom_inst : entity work.sprom
+generic map
+(
+		 init_file => "rtl/skin4.mif",
+		 widthad_a => 16,
+		 width_a => 32
+)
+port map
+(
+		 clock           => clk42,
+		 address => img_address,
+		 q    => img_rgb
+);
+
+
 
 process(clk42)
 begin
@@ -547,7 +649,7 @@ begin
 			if hctr=hend then
 				hctr<=(others=>'0');
 				vctr<=vctr+1;
-				if vctr>=vend then
+				if vctr=vend then
 					vctr<=(others=>'0');
 				end if;
 			end if;
@@ -582,6 +684,38 @@ vdisp <= '1' when vctr>=vsynlen and vctr<vend else '0';
 
 pthdisp <= '1' when hctr>=ptlhstrt and hctr<ptlhend else '0';
 ptvdisp <= '1' when vctr>=ptlvstrt and vctr<ptlvend else '0';
+
+img_hact <= '1' when hctr>=512 and hctr<608 else '0' ;
+img_vact <= '1' when vctr>=40 and vctr<232 else '0' ; 
+
+img_logo <= '1' when vctr>=40 and vctr<138 else '0' ;
+img_rs232 <= '1' when vctr>=138 and vctr<150 else '0' ;
+img_dr1 <= '1' when vctr>=150 and vctr<170 else '0' ; 
+img_dr2 <= '1' when vctr>=170 and vctr<190 else '0' ; 
+img_dr3 <= '1' when vctr>=190 and vctr<210 else '0' ; 
+img_dr4 <= '1' when vctr>=210 and vctr<232 else '0' ; 
+
+img_led232_col1 <=  '1' when img_hctr>=16 and img_hctr<48 else '0' ;
+img_led232_col2 <=  '1' when img_hctr>=80 and img_hctr<112 else '0' ;
+img_led232_col3 <=  '1' when img_hctr>=144 and img_hctr<176 else '0' ;
+img_led232_col4 <=  '1' when img_hctr>=208 and img_hctr<240 else '0' ;
+img_led232_col5 <=  '1' when img_hctr>=272 and img_hctr<304 else '0' ;
+img_led232_col6 <=  '1' when img_hctr>=336 and img_hctr<368 else '0' ;
+img_led232_row <='1' when vctr>=144 and vctr<146 else '0' ;
+img_led232_1 <='1' when img_led232_row='1' and img_led232_col1='1' else '0' ;
+img_led232_2 <='1' when img_led232_row='1' and img_led232_col2='1' else '0' ;
+img_led232_3 <='1' when img_led232_row='1' and img_led232_col3='1' else '0' ;
+img_led232_4 <='1' when img_led232_row='1' and img_led232_col4='1' else '0' ;
+img_led232_5 <='1' when img_led232_row='1' and img_led232_col5='1' else '0' ;
+img_led232_6 <='1' when img_led232_row='1' and img_led232_col6='1' else '0' ;
+
+img_led_col <= '1' when img_hctr>=33 and img_hctr<64 else '0' ;
+img_led_1 <= '1' when vctr>=153 and vctr<156 and img_led_col='1' else '0' ;
+img_led_2 <= '1' when vctr>=173 and vctr<176 and img_led_col='1' else '0' ;
+img_led_3 <= '1' when vctr>=193 and vctr<196 and img_led_col='1' else '0' ;
+img_led_4 <= '1' when vctr>=213 and vctr<216 and img_led_col='1' else '0' ;
+
+img_valid <= '1' when img_hact='1' and img_vact='1' and skin='1' else '0' ;
 
 process(clk42)
 begin
@@ -626,7 +760,8 @@ begin
 					-- new frame
 					vaVert<= "0000";
 					vpos <= "0000";
-
+					img_vctr <= (others=>'0')  ;
+					
 				elsif (vact='1' or vdebug='1') and hctr=hstart+hsize+2 then  
 					-- end of a scanline
 					if vpos=11 then
@@ -639,7 +774,20 @@ begin
 					end if;
 				end if;
 			end if;
+			if (hctr=511) then 
+				img_hctr<=(others=>'0')  ;
+				if (vctr=40 or vctr=138 or vctr=150 or vctr=170 or vctr=190 or vctr=210) then -- origins of img parts in the page
+					img_vctr<=(others=>'0')  ; 
+				else 
+					img_vctr<=img_vctr+1 ; 
+				end if ;
+			end if;
+			
 		end if;
+		-- clock*4 here for Hires Skin pict
+		if (hctr>511) then 
+			img_hctr<=img_hctr+1 ;
+		end if ;
 	end if;
 end process;
 

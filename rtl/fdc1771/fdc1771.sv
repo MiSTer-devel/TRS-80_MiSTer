@@ -70,7 +70,12 @@ module fdc1771 (
 	output     [7:0] sector_out,
 	output     [7:0] data_in_out,
 	output     [7:0] status_out,
-	output	  [15:0] spare_out
+	output	  [15:0] spare_out,
+	
+	// status display graphical UI
+	output	[3:0] UI_floppy_ready,
+	output	[3:0] UI_floppy_read,
+	output	[3:0] UI_floppy_write
 
 );
 
@@ -200,6 +205,8 @@ always @(*) begin
 		//endcase;
 		image_gap_len = 10'd1;
 //	end
+
+	UI_floppy_ready <= floppy_ready ;
 end
 
 always @(posedge clk_sys) begin
@@ -1289,6 +1296,28 @@ always @(posedge clk_sys) begin
 		if (track_inc_strobe) if (track != 8'hff) track <= track + 8'd1; // note : allow to go over 240, so "seek" always completes.
 		if (track_dec_strobe) if (track != 0) track <= track - 8'd1;
 		if (track_clear_strobe) track <= 8'd0;
+	end
+end
+
+always @(posedge clk_sys) begin
+	if(!floppy_reset) begin
+			UI_floppy_read <= 4'b0000 ;
+			UI_floppy_write <= 4'b0000 ;		
+	end else begin
+		if (busy) begin
+			if (floppy_drive == 4'b1110 || floppy_drive == 4'b1101 || floppy_drive == 4'b1011 || floppy_drive == 4'b0111) begin
+				if (cmd[7:5]==3'b101 || cmd[7:4]==4'b1111) 
+					UI_floppy_write <= floppy_drive ^ 4'b1111 ;
+				else 
+					UI_floppy_read <= floppy_drive ^ 4'b1111 ;
+			end else begin
+				UI_floppy_read <= 4'b0000 ;
+				UI_floppy_write <= 4'b0000 ;
+			end			
+		end else begin
+			UI_floppy_read <= 4'b0000 ;
+			UI_floppy_write <= 4'b0000 ;
+		end
 	end
 end
 

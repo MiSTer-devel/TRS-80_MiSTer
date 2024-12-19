@@ -51,12 +51,13 @@ Port (
 	clk42m     : in  STD_LOGIC;
 	cpum1_out  : out STD_LOGIC;
 
-	RGB        : out STD_LOGIC_VECTOR (17 downto 0);
+	RGB        : out STD_LOGIC_VECTOR (23 downto 0);
 	HSYNC      : out STD_LOGIC;
 	VSYNC      : out STD_LOGIC;
 	hblank     : out STD_LOGIC;
 	vblank     : out STD_LOGIC;
 	ce_pix     : out STD_LOGIC;
+	skin		  : in STD_LOGIC;
 
 	LED        : out STD_LOGIC;
 
@@ -107,11 +108,11 @@ Port (
 	sd_buff_din  	: out std_logic_vector(7 downto 0);
 	sd_dout_strobe 	: in std_logic;
 
-	UART_TXD       :out  std_logic;
+	UART_TXD       :buffer  std_logic;
 	UART_RXD       :in  std_logic;
-	UART_RTS       :out  std_logic;
+	UART_RTS       :buffer  std_logic;
 	UART_CTS       :in  std_logic;
-	UART_DTR       :out  std_logic;
+	UART_DTR       :buffer  std_logic;
 	UART_DSR       :in  std_logic;
 	
 	uart_mode	   :in std_logic_vector(7 downto 0);
@@ -282,7 +283,11 @@ component fdc1771 is
 			sector_out		: out  std_logic_vector(7 downto 0);	
 			data_in_out		: out  std_logic_vector(7 downto 0);	
 			status_out		: out  std_logic_vector(7 downto 0);
-			spare_out		: out  std_logic_vector(15 downto 0)   -- spare for debugging other stuff FLYNN
+			spare_out		: out  std_logic_vector(15 downto 0);   -- spare for debugging other stuff FLYNN
+			
+			UI_floppy_ready : out std_logic_vector(3 downto 0);
+			UI_floppy_write : out std_logic_vector(3 downto 0);
+			UI_floppy_read : out std_logic_vector(3 downto 0)
 		);
 end component ;
 
@@ -359,6 +364,7 @@ signal rgbi : std_logic_vector(3 downto 0);
 signal vramdo, kbdout, video_dout: std_logic_vector(7 downto 0);
 signal video_addr : std_logic_vector(13 downto 0);
 signal video_wr : std_logic;
+signal img_valid  : STD_LOGIC;
 
 signal Fn : std_logic_vector(11 downto 0);
 signal modif : std_logic_vector(2 downto 0);
@@ -393,7 +399,7 @@ signal dbugmsg_addr  : STD_LOGIC_VECTOR (5 downto 0);
 signal dbugmsg_data  : STD_LOGIC_VECTOR (7 downto 0);  -- debug message
 signal dbugldr_data  : STD_LOGIC_VECTOR (7 downto 0);  -- Loader message
 signal dbugmsg_video : STD_LOGIC_VECTOR (7 downto 0);  -- debug message selector
-
+signal v_debug			: std_logic;
 
 signal io_ram_addr	: std_logic_vector(23 downto 0);
 signal iorrd,iorrd_r	: std_logic;
@@ -458,6 +464,11 @@ type motor_state is (stopped, spinup, running);
 signal fdc_motor_state : motor_state;
 signal fdc_motor_on : std_logic := '0';
 signal fdc_motor_countdown : integer := 0;
+-- UI floppy
+signal UI_floppy_ready : std_logic_vector(3 downto 0);
+signal UI_floppy_write : std_logic_vector(3 downto 0);
+signal UI_floppy_read : std_logic_vector(3 downto 0);
+
 -- debugging counter
 signal counter : std_logic_vector(31 downto 0) := (others => '0');  -- Used for debugging via SignalTap
 attribute noprune: boolean; 
@@ -490,6 +501,7 @@ signal widemode_r, widemode_s : std_logic ;
 
 signal ss_ram_addr : std_logic_vector(15 downto 0);
 -- signal ss_debug_ctr : std_logic_vector(15 downto 0);
+signal img_rgb : std_logic_vector(31 downto 0);
 
 begin
 
@@ -700,7 +712,11 @@ port map
 	sector_out => dbg_sector,
 	data_in_out => dbg_data_in,
 	status_out => dbg_status,
-	spare_out => dbg_spare
+	spare_out => dbg_spare,
+	
+	UI_floppy_ready => UI_floppy_ready,
+	UI_floppy_write => UI_floppy_write,
+	UI_floppy_read => UI_floppy_read
 
 );
 
@@ -846,6 +862,7 @@ port map
 (
 	reset => not reset,
 	clk42 => clk42m,
+	skin => skin,
 	a => video_addr,
 	din => video_dout,
 	dout => vramdo,
@@ -853,6 +870,7 @@ port map
 	debug_enable => debug,			-- Enable to show disk debugging
 	dbugmsg_addr => dbugmsg_addr,
 	dbugmsg_data => dbugmsg_video,
+	v_debug => v_debug,
 
 	mreq => cpumreq,
 	iorq => cpuiorq,
@@ -870,7 +888,20 @@ port map
 	hsync => hsync,
 	vsync => vsync,
 	hb => hblank,
-	vb => vblank
+	vb => vblank,
+	
+	img_rgb => img_rgb,
+	img_valid => img_valid,
+	
+	UI_floppy_ready => UI_floppy_ready,
+	UI_floppy_write => UI_floppy_write,
+	UI_floppy_read => UI_floppy_read,
+	UART_RX => UART_RXD,
+	UART_TX => UART_TXD,
+	UART_RTS => UART_RTS,
+	UART_CTS => UART_CTS,
+	UART_DTR => UART_DTR,
+	UART_DSR => UART_DSR
 );
 
 
@@ -1071,10 +1102,12 @@ with rgbi select ht_rgb_amber <=
 
 
 RGB <=
-	ht_rgb_white when disp_color = "00" else
-	ht_rgb_green when disp_color = "01" else
-	ht_rgb_amber when disp_color = "10" else
-	"111110111110111110";
+   img_rgb(15 downto 8) & img_rgb(23 downto 16) & img_rgb(31 downto 24) when img_valid='1' else
+	"000000001111001111110011" when v_debug='1' and rgbi="1011" else
+	ht_rgb_white(17 downto 12) & ht_rgb_white(17 downto 16) & ht_rgb_white(11 downto 6) & ht_rgb_white(11 downto 10) & ht_rgb_white(5 downto 0) & ht_rgb_white(5 downto 4) when disp_color = "00" else
+	ht_rgb_green(17 downto 12) & ht_rgb_green(17 downto 16) & ht_rgb_green(11 downto 6) & ht_rgb_green(11 downto 10) & ht_rgb_green(5 downto 0) & ht_rgb_green(5 downto 4) when disp_color = "01" else
+	ht_rgb_amber(17 downto 12) & ht_rgb_amber(17 downto 16) & ht_rgb_amber(11 downto 6) & ht_rgb_amber(11 downto 10) & ht_rgb_amber(5 downto 0) & ht_rgb_amber(5 downto 4) when disp_color = "10" else
+	"111110111111101111111011";
 
 main_mem : dpram
 generic map (

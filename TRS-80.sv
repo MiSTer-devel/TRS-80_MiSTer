@@ -7,7 +7,8 @@
 //
 //============================================================================
 
-localparam NBDRIV=4;
+localparam NBDRIV=5;
+localparam VD = NBDRIV-1;
 
 module emu
 (
@@ -191,15 +192,15 @@ assign LED_USER  = ioctl_download;
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"TRS-80;SS3E000000:10000,UART19200:9600:4800:2400:1200:300:110;",
-	"S0,DSKJV1,Mount Disk 0:;",
- 	"S1,DSKJV1,Mount Disk 1:;",
- 	"S2,DSKJV1,Mount Disk 2:;",
- 	"S3,DSKJV1,Mount Disk 3:;",
+	"S1,DSKJV1,Mount Disk 0:;",  // Don't use slot0 because it gets overridden when using file FS3 below. Probably a MisterMain bug.
+ 	"S2,DSKJV1,Mount Disk 1:;",
+ 	"S3,DSKJV1,Mount Disk 2:;",
+ 	"S4,DSKJV1,Mount Disk 3:;",
 	"-;",
 	"F2,CMDBAS,Load Program;",
 	"F1,CAS,Load Cassette;",
@@ -219,6 +220,7 @@ localparam CONF_STR = {
 	"P1OCD,Overscan,None,Partial,Full;",
 	"P1OF,Overscan Status Line,Off,On;",
 	"P1O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"P1ON,TRS80 Skin,Off,On;",
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
@@ -250,15 +252,15 @@ wire  [15:0] ioctl_index;
 wire	    ioctl_wait;
 wire [31:0] sd_lba[NBDRIV];
 wire [31:0] sd_lba_0;
-wire  [3:0] sd_rd;
-wire  [3:0] sd_wr;
-wire  [3:0] sd_ack;
+wire  [VD:0] sd_rd;
+wire  [VD:0] sd_wr;
+wire  [VD:0] sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din_0;
 wire  [7:0] sd_buff_din[NBDRIV];
 wire        sd_buff_wr;
-wire  [3:0] img_mounted;
+wire  [4:0] img_mounted;
 wire        img_readonly;
 wire [63:0] img_size;
 
@@ -333,7 +335,7 @@ always_ff @(posedge clk_sys or posedge reset) begin
 	if (reset) begin
 		debug_select_line <= 1'b0 ; 
 		prev_execute_addr <= 16'h0000 ;
-		if (rom_download) menumask[1] <= 1'b1 ;
+		if (rom_download) menumask <= "02" ; // menumask[1]=1
 	end else
 	begin
 		prev_status_15 <= status[15] ;
@@ -425,6 +427,7 @@ trs80 trs80
 	.hblank(HBlank),
 	.vblank(VBlank),
 	.ce_pix(ce_pix),
+	.skin(status[23]),
 
 	.LED(LED),
 	.audiomix(audiomix),
@@ -455,14 +458,14 @@ trs80 trs80
 	.dbg_min_addr(dgb_min_addr),
 	.dbg_max_addr(dgb_max_addr),
 
-	.img_mounted(img_mounted),
+	.img_mounted(img_mounted[4:1]), // we avoid drive0, because it gets overrided if FS3 is opened ...
 	.img_readonly(img_readonly),
 	.img_size(img_size),
 
 	.sd_lba(sd_lba_0),
-	.sd_rd(sd_rd),
-	.sd_wr(sd_wr),
-	.sd_ack(sd_ack[0]|sd_ack[1]|sd_ack[2]|sd_ack[3]),
+	.sd_rd(sd_rd[4:1]),
+	.sd_wr(sd_wr[4:1]),
+	.sd_ack(sd_ack[4]|sd_ack[1]|sd_ack[2]|sd_ack[3]),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
 	.sd_buff_din(sd_buff_din_0),
@@ -500,20 +503,23 @@ assign sd_buff_din[0]=sd_buff_din_0;
 assign sd_buff_din[1]=sd_buff_din_0;
 assign sd_buff_din[2]=sd_buff_din_0;
 assign sd_buff_din[3]=sd_buff_din_0;
+assign sd_buff_din[4]=sd_buff_din_0;
 assign sd_lba[0]=sd_lba_0;
 assign sd_lba[1]=sd_lba_0;
 assign sd_lba[2]=sd_lba_0;
 assign sd_lba[3]=sd_lba_0;
+assign sd_lba[4]=sd_lba_0;
 
 
 ///////////////////////////////////////////////////
 wire        ce_pix;
-wire [17:0] RGB;
+wire [23:0] RGB;
 wire        HSync,VSync,HBlank,VBlank;
 
 wire  [2:0] scale = status[3:1];
 wire  [2:0] sl = scale > 1'd1 ? scale - 1'd1 : 3'b000;
 wire freeze_sync;
+
 // aspect ratio including all border space is  4:3
 // aspect ratio iwith partial border space is 20:17
 // aspect ratio of only displayed area is     11:10
@@ -531,13 +537,15 @@ video_mixer #(.LINE_LENGTH(672), .GAMMA(1)) video_mixer
 	.hq2x(scale==3'b001),
 
 
-	.R({RGB[5:0],RGB[5:4]}),
-	.G({RGB[11:6],RGB[11:10]}),
-	.B({RGB[17:12],RGB[17:16]})
+	.R(RGB[7:0]),
+	.G(RGB[15:8]),
+	.B(RGB[23:16])
 );
 
 wire  [8:0] audiomix;
 
+assign sd_rd[0] = 1'b0 ;
+assign sd_wr[0] = 1'b0 ;
 assign AUDIO_L={audiomix,7'b0000000};
 assign AUDIO_R=AUDIO_L;
 
