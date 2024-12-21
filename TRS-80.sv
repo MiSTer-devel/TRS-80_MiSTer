@@ -172,7 +172,9 @@ assign VGA_DISABLE = 0;
 
 // assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign USER_OUT = '1;
+
+// assign USER_OUT = '1 ;
+
 // assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign DDRAM_CLK =  clk_sys ;
 assign ADC_BUS  = 'Z;
@@ -180,7 +182,6 @@ assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQM
 
 assign BUTTONS = 0;
 
-assign AUDIO_S = 0;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK  = LED;				/* later add disk motor on/off */
@@ -192,12 +193,12 @@ assign LED_USER  = ioctl_download;
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXX         XXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
-	"TRS-80;SS3E000000:10000,UART19200:9600:4800:2400:1200:300:110;",
-	"S1,DSKJV1,Mount Disk 0:;",  // Don't use slot0 because it gets overridden when using file FS3 below. Probably a MisterMain bug.
+	"TRS-80;SS3E000000:10000,UART31250:9600:4800:2400:1200:300:110,MIDI;",
+	"S1,DSKJV1,Mount Disk 0:;",  // Don't use slot0 because it gets overwritten when using file FS3 below. Probably a MisterMain bug.
  	"S2,DSKJV1,Mount Disk 1:;",
  	"S3,DSKJV1,Mount Disk 2:;",
  	"S4,DSKJV1,Mount Disk 3:;",
@@ -211,7 +212,7 @@ localparam CONF_STR = {
 	"D1RH,Load State;",
 	"D1RI,Save State;",
 	"-;",
-	"P1,Display Options;",
+	"P1,Display and MT32 Options;",
 	"P1-,Display Options;",
 	"P1-;",
 	"P1O56,Screen Color,White,Green,Amber;",
@@ -221,6 +222,16 @@ localparam CONF_STR = {
 	"P1OF,Overscan Status Line,Off,On;",
 	"P1O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"P1ON,TRS80 Skin,Off,On;",
+	"P1-;",
+	
+	"P1o1,Use MT32-pi,No,Yes;",
+	"P1o89,Show Info,No,Yes,LCD-On(non-FB),LCD-Auto(non-FB);",
+	"P1o2,Synth,Munt,FluidSynth;",
+	"P1o34,Munt ROM,MT-32 v1,MT-32 v2,CM-32L;",
+	"P1o57,SoundFont,0,1,2,3,4,5,6,7;",
+	"P1-;",
+	"P1r0,Reset Hanging Notes;",
+	
 	"-;",
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
@@ -229,6 +240,19 @@ localparam CONF_STR = {
 	"RG,Erase memory and reset;",
 	"R0,Reset;",
 	"J,Fire;",
+	"I,",
+	"MT32-pi: SoundFont #0,",
+	"MT32-pi: SoundFont #1,",
+	"MT32-pi: SoundFont #2,",
+	"MT32-pi: SoundFont #3,",
+	"MT32-pi: SoundFont #4,",
+	"MT32-pi: SoundFont #5,",
+	"MT32-pi: SoundFont #6,",
+	"MT32-pi: SoundFont #7,",
+	"MT32-pi: MT-32 v1,",
+	"MT32-pi: MT-32 v2,",
+	"MT32-pi: CM-32L,",
+	"MT32-pi: Unknown mode;",
 	"V,v",`BUILD_DATE
 };
 
@@ -240,7 +264,7 @@ pll pll
 	.outclk_0 (clk_sys) // 42 MHz
 );
 
-wire [31:0] status;
+wire [63:0] status;
 wire [15:0] menumask ;
 wire  [1:0] buttons;
 wire			cpum1;
@@ -288,7 +312,9 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 
 	.status(status),
 	.status_menumask(menumask),
-
+	.info_req(info_req),
+	.info(info),
+	
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
@@ -335,7 +361,7 @@ always_ff @(posedge clk_sys or posedge reset) begin
 	if (reset) begin
 		debug_select_line <= 1'b0 ; 
 		prev_execute_addr <= 16'h0000 ;
-		if (rom_download) menumask <= "02" ; // menumask[1]=1
+		if (rom_download) menumask <= 16'h0002 ; // menumask[1]=1
 	end else
 	begin
 		prev_status_15 <= status[15] ;
@@ -471,12 +497,12 @@ trs80 trs80
 	.sd_buff_din(sd_buff_din_0),
 	.sd_dout_strobe(sd_buff_wr),
 
-	.UART_TXD(UART_TXD),
-	.UART_RXD(UART_RXD),
-	.UART_RTS(UART_RTS),
-	.UART_CTS(UART_CTS),
-	.UART_DTR(UART_DTR),
-	.UART_DSR(UART_DSR),
+	.UART_TXD(uart_tx),
+	.UART_RXD(uart_rx),
+	.UART_RTS(uart_rts),
+	.UART_CTS(uart_cts),
+	.UART_DTR(uart_dtr),
+	.UART_DSR(uart_dsr),
 	
 	.uart_mode(uart_mode),   // 0=None, 1=PPP or Modem, 2=Console, 3=MIDI 
 	.uart_speed(uart_speed),
@@ -497,6 +523,26 @@ trs80 trs80
 	.ss_slot(status[20:19])
 	
 );
+
+////////////////////////////  UART  ////////////////////////////////////
+
+/// UART1
+
+wire uart_cts, uart_dcd, uart_dsr, uart_rts, uart_dtr;
+wire uart_tx, uart_rx;
+wire midi_tx, midi_rx;
+
+wire hps_mpu = (uart_mode == 0 || mt32_use);
+
+assign UART_RTS  = uart_rts;
+assign UART_DTR  = uart_dtr;
+assign uart_cts = UART_CTS;
+assign uart_dcd = UART_DSR;
+assign uart_dsr = UART_DSR;
+assign uart_rx    = hps_mpu ? midi_rx : UART_RXD;
+assign UART_TXD  = hps_mpu ? 1'b1 : uart_tx ;
+assign midi_tx  = hps_mpu ? uart_tx : 1'b1;
+
 
 
 assign sd_buff_din[0]=sd_buff_din_0;
@@ -536,17 +582,117 @@ video_mixer #(.LINE_LENGTH(672), .GAMMA(1)) video_mixer
 	.scandoubler(scale || forced_scandoubler),
 	.hq2x(scale==3'b001),
 
-
-	.R(RGB[7:0]),
-	.G(RGB[15:8]),
-	.B(RGB[23:16])
+	.R(mt32_lcd ? {{2{mt32_lcd_pix}},RGB[7:2]} : RGB[7:0]),
+	.G(mt32_lcd ? {{2{mt32_lcd_pix}},RGB[15:10]} : RGB[15:8]),
+	.B(mt32_lcd ? {{2{mt32_lcd_pix}},RGB[23:18]} : RGB[23:16])
+//	.R(RGB[7:0]),
+//	.G(RGB[15:8]),
+//	.B(RGB[23:16])
 );
-
-wire  [8:0] audiomix;
 
 assign sd_rd[0] = 1'b0 ;
 assign sd_wr[0] = 1'b0 ;
-assign AUDIO_L={audiomix,7'b0000000};
-assign AUDIO_R=AUDIO_L;
+
+reg [15:0] out_l, out_r;
+always @(posedge CLK_AUDIO) begin
+	reg [16:0] tmp_l, tmp_r;
+
+	tmp_l <= {1'b0, audiomix, 7'b0000000 } + (mt32_mute ? 17'd0 : {mt32_i2s_l[15],mt32_i2s_l});
+	tmp_r <= {1'b0, audiomix, 7'b0000000 } + (mt32_mute ? 17'd0 : {mt32_i2s_r[15],mt32_i2s_r});
+
+	// clamp the output
+	out_l <= (^tmp_l[16:15]) ? {tmp_l[16], {15{tmp_l[15]}}} : tmp_l[15:0];
+	out_r <= (^tmp_r[16:15]) ? {tmp_r[16], {15{tmp_r[15]}}} : tmp_r[15:0];
+end
+
+wire  [8:0] audiomix;
+
+assign AUDIO_S=1 ;
+assign AUDIO_L=out_l ;
+assign AUDIO_R=out_r;
+
+//  MT32 stuff
+//	Shamelessly copied from AtariST
+
+////////////////////////////  MT32pi  ////////////////////////////////// 
+
+wire        mt32_reset    = status[32] | reset;
+wire        mt32_disable  = ~status[33];
+wire        mt32_mode_req = status[34];
+wire  [1:0] mt32_rom_req  = status[36:35];
+wire  [7:0] mt32_sf_req   = status[39:37];
+wire  [1:0] mt32_info     = status[41:40];
+
+wire [15:0] mt32_i2s_r, mt32_i2s_l;
+wire  [7:0] mt32_mode, mt32_rom, mt32_sf;
+wire        mt32_lcd_en, mt32_lcd_pix, mt32_lcd_update;
+
+wire mt32_newmode;
+wire mt32_available;
+wire mt32_use  = mt32_available & ~mt32_disable;
+wire mt32_mute = mt32_available &  mt32_disable;
+
+mt32pi mt32pi
+(
+	.*,
+	.reset(mt32_reset),
+	.CE_PIXEL(mt32_ce_pix)
+
+);
+
+wire  [4:0] mt32_cfg = (mt32_mode == 'hA2) ? {mt32_sf[2:0],  2'b10} :
+                       (mt32_mode == 'hA1) ? {mt32_rom[1:0], 2'b01} : 5'd0;
+
+reg mt32_lcd_on;
+always @(posedge CLK_VIDEO) begin
+	int to;
+	reg old_update;
+
+	old_update <= mt32_lcd_update;
+	if(to) to <= to - 1;
+
+	if(mt32_info == 2) mt32_lcd_on <= 1;
+	else if(mt32_info != 3) mt32_lcd_on <= 0;
+	else begin
+		if(!to) mt32_lcd_on <= 0;
+		if(old_update ^ mt32_lcd_update) begin
+			mt32_lcd_on <= 1;
+			to <= 96000000 * 2;
+		end
+	end
+end
+
+wire mt32_lcd = mt32_lcd_on & mt32_lcd_en;
+
+reg mt32_ce_pix;
+always @(posedge CLK_VIDEO) begin
+	reg [1:0] div;
+
+	div <= div + 1'd1;
+	if(div == 2) div <= 0;
+
+	mt32_ce_pix <= 0;
+	if(!div) mt32_ce_pix <= ce_pix;
+end
+
+
+/* ------------------------------------------------------------------------------ */
+
+reg [7:0] info;
+reg       info_req = 0;
+always @(posedge clk_sys) begin
+	reg old_mode;
+	reg old_mt32mode;
+
+	old_mt32mode <= mt32_newmode;
+	info_req <=  ((old_mt32mode ^ mt32_newmode) && (mt32_info == 1));
+
+	info <= (mt32_mode == 'hA2)                  ? (8'd1 + mt32_sf[2:0]) :
+           (mt32_mode == 'hA1 && mt32_rom == 0) ?  8'd9 :
+           (mt32_mode == 'hA1 && mt32_rom == 1) ?  8'd10 :
+           (mt32_mode == 'hA1 && mt32_rom == 2) ?  8'd11 : 8'd12;
+end
+
+
 
 endmodule

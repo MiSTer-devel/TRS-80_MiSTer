@@ -43,6 +43,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Expansion interface with quad disk drives
  * Real Time Clock (RTC)
  * RS232-C Interface (IO ports $E8 to $EA)
+ * MIDI/80 compatible, with optional MT32-Pi
  * SavedStates
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
@@ -65,6 +66,15 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
    - 0010-002f : Z80 registers (A,F,A',F',I,R,SP,PC,BC,DE,HL,IX,BC',DE',HL',IY,IM,IFF1,IFF2)
    - 0030-042F : Video Screen 
    - 0430-c42f : Main Memory (4000-ffff) 
+
+## MIDI/80
+ * Open project by Michael Wessel and George Phillips, details at https://github.com/lambdamikel/MIDI-80
+ * Defines I/O ports 8 and 9 as an alternative entry for the RS232 circuit, hooked to the MIDI outputs
+ * Output to Mister's internal Synth, or MT-32 (if the option is checked)
+ * Software lies there : https://github.com/lambdamikel/MIDI-80/tree/main/trs-80/model-1/dsk (all JV1 compatibles disks)
+ * MIDORG works great ! But the midi files are not very suited instrument-wise, that would need some adaptation midi-wise.
+ * Note : there is no Midi-inputs (no recorder) 
+ * Note : if MT32-Pi is used, the RS232 circuit cannot be used for anything else. 
 
 ## Notes:
  * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
