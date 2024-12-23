@@ -298,6 +298,7 @@ port (
 
    addr		  : in std_logic_vector(1 downto 0) ; -- address from CPU
 	cs_n		  : in  std_logic; -- chip select 0xE8
+	cs_n8		  : in  std_logic; -- chip select 0xE8
 	iow_n		  : in std_logic;  -- io write
 	ior_n		  : in std_logic;  -- io read
 	DO			  : out std_logic_vector(7 downto 0) ;
@@ -313,7 +314,7 @@ port (
 	UART_DTR   : out  std_logic;
 	UART_DSR   : in  std_logic ;
 	
-	uart_debug : out std_logic_vector(11 downto 0)
+	uart_debug : out std_logic_vector(15 downto 0)
 );
 end component ;
 
@@ -477,10 +478,10 @@ attribute noprune of counter: signal is true; -- set to false for RTL
 -- RS232 interconn.
 signal baud_sel : std_logic_vector(3 downto 0);
 signal clk_rs16 : std_logic ;
-signal rs232_cs : std_logic ;
+signal rs232_cs, rs232_cs8 : std_logic ;
 signal rs232_rd : std_logic ;
 signal rs232_out : std_logic_vector(7 downto 0);
---signal uart_debug : std_logic_vector(11 downto 0);
+signal uart_debug : std_logic_vector(15 downto 0);
 
 -- Save state
 signal ss_state : std_logic_vector(7 downto 0);
@@ -781,9 +782,10 @@ fdc_sel2 <= (fdc_rd xor fdc_wr);
 floppy_select_write <= '1' when cpua(15 downto 2)="00110111111000" and memw='0' else '0';
 irq_latch_read <= '1' when cpua(15 downto 0)=x"37e0" and memr='0' else '0';
 expansion_irq <= clk_25ms_latch and fdc_irq_latch;
-rs232_cs <= '0' when cpua(7 downto 2)=x"3a" else '1'; -- in ports $E8 to $EB
-rs232_rd <= rs232_cs or ior;
-
+rs232_cs <= '0' when cpua(7 downto 2)="111010" else '1'; -- in ports $E8 to $EB
+rs232_cs8 <= '0' when cpua(7 downto 1)="0000100" else '1'; -- in ports $08 to $09 for MIDI/80 emulation
+rs232_rd <= (rs232_cs and rs232_cs8)  or ior  ;
+ 
 -- Holmes Sprinter FDC override speed
 process(clk42m, reset)
 begin
@@ -940,10 +942,14 @@ begin
 		when 39 => dbugmsg_data <= hex(conv_integer(dbg_status(3 downto 0))); 
 		when 40 => dbugmsg_data <= x"2c";				-- comma    ","
 		when 41 => dbugmsg_data <= x"78";				-- command  "x"
-		when 42 => dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11))); 
-		when 43 => dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8))); 
-		when 44 => dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4))); 
-		when 45 => dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0))); 
+--		when 42 => dbugmsg_data <= hex(conv_integer(dbg_spare(15 downto 11))); 
+--		when 43 => dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8))); 
+--		when 44 => dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4))); 
+--		when 45 => dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0))); 
+		when 42 => dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 12))); 
+		when 43 => dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8))); 
+		when 44 => dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4))); 
+		when 45 => dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0))); 
 		
 		when 47 => if(tick_1s='0') then dbugmsg_data <= x"20"; else dbugmsg_data <= x"2a"; end if;
 		--
@@ -1269,7 +1275,8 @@ port map
 	clk42m =>  clk42m,   
 
    addr	=>	 cpua(1 downto 0), 
-	cs_n	=>  rs232_cs,	  
+	cs_n	=>  rs232_cs,  -- cs for rs232 card	  
+	cs_n8 => rs232_cs8,  -- cs for MIDI/80 card
 	iow_n	=> iow,	  
 	ior_n => ior,
 	DO	=> rs232_out,
@@ -1283,9 +1290,9 @@ port map
 	UART_RTS   => UART_RTS,
 	UART_CTS   => UART_CTS,
 	UART_DTR   => UART_DTR,
-	UART_DSR   => UART_DSR
+	UART_DSR   => UART_DSR,
 	
---	uart_debug => uart_debug
+	uart_debug => uart_debug
 ) ;
 
 -- DDRAM for the savestates
