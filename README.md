@@ -7,6 +7,14 @@ https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 
 The TRS-80 with boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
 
+## Boot Rom
+You must provide a file named "BOOT.ROM" that contains a TRS-80 Model I ROM image. The file must be placed in /media/fat/games/TRS-80 or another location permitted by MiSTer. Any original should work, or a System80 one, and you may look at www.classic-computers.org.nz/system80/ (section emulators) to find one. Usual size for this file is 12 kib or 14 kib.
+The modified ROM that permits fast cassette accesses may be built from the file "system_80_bluelabel_rom" by applying the following patch :
+```
+  at location 0x236
+  is        : e5 06 08 cd 41 02 10 fb e1 c1 c9 c5 f5 db ff 17
+  should/be : e5 db 04 00 00 00 00 00 e1 c1 c9 db 04 c9 ff 17 
+```
 ### To load a cassette game:
 ```
   return
@@ -15,7 +23,7 @@ The TRS-80 with boot to a "Ready?" screen, loading Basic with no drive support t
   [type the first letter of the file you want to load (e or g for the disk images provided)]
   / (to start once loaded)
 ```
-Note: The cassette loader has a special feature allowing you to load a ZIP file (renamed as a fake .CAS file) and unzip it directly in any DOS with the "MrUnzip/cmd" application you'll find in the support files.
+Note: The cassette loader has a special feature allowing you to load a ZIP file (renamed as a fake .CAS file) and unzip it directly in any DOS with the "MrUnzip/cmd" application you'll find in the support files. The ROM patch is not needed for this to run full speed.
 
 ### To load a CMD file:
 Just select it in the OSD. Some CMD files won't work if they access disk rom routines and there is no disk in the drive. Sometimes a clean reboot is necessary before loading a CMD.
@@ -38,6 +46,7 @@ There are three main TRS-80 image formats, which are JV1, JV3 and DMK and they a
 
 The Disk emulation supports reading and writing to JV1 formatted disks, but disks cannot be formatted in the core because there is no Write Track support for JV1 images.  There are many different DOS versions for the TRS-80 with popular ones including TRSDOS, NEWDOS/80, LDOS and MULTIDOS.  For beginners it is recommended you use TRSDOS which is the original DOS produced by Radio Shack.  Instructions for using TRSDOS can be found in the following Wikipedia article: https://en.wikipedia.org/wiki/TRSDOS
 
+
 ## Features:
  * TRS-80 Model I with 48KB installed
  * Expansion interface with quad disk drives
@@ -47,7 +56,7 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * SavedStates
  * White, Green and Amber Phosphor screen emulation
  * Sound output is supported (however cassette saving sound is suppressed)
- * Cassette loading is many times faster than the original 500 bauds
+ * Cassette loading is many times faster than the original 500 bauds (if the ROM patch is present)
  * direct ZIP/UNZIP download feature (look in the support files for MrUnzip)
  * Ctrl Key simulates shift-DownArrow
  * TRS-80 Skin (only visible if an overscan is selected)
@@ -59,7 +68,6 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * You can create as many save "rom_names" as you want, they are just needed to define the "rom_name" under which the savestates are saved, and they are not used.
  * Use the OSD to select a slot with the "Snapshot "\*.SAV" OSD entry, and a state number from the "Savestate slot" OSD entry 
  * the physical saves are stored in /media/fat/savestates/TRS-80/
- * the UI is a bit primitive for the moment, this will be updated in the future (probably).
  * The SaveStates mecanism saves the video memory, the main memory and the processor's internal registers and states. It doesn't save any other peripheral, notably not the disk controller. That should be ok though, but don't do bizarre things like making a snapshot right in the middle of a writing sectors sequence, it's not gonna end well.
  * The details of the format of the savestate file are as follow :
    - 0000-000f : Mister header, serial number of the save and file size in 32bits words
@@ -77,17 +85,13 @@ The Disk emulation supports reading and writing to JV1 formatted disks, but disk
  * Note : if MT32-Pi is used, the RS232 circuit cannot be used for anything else. 
 
 ## Notes:
- * The included BOOT.ROM has been modified to take advantage of a special interface for loading cassettes; original BASIC ROMs are also supported
- * Simulates Percom Doubler and TRS-80DD, but the upcoming JV3 decoding will be required to use DD disk images (disabled for now)
  * Even though sector write operations are supported, formatting of disks is not.
  * Prefer keyboard "TRS80" mapping for games, and reserve "PC" mapping for desktop apps. The latter may misbehave when several keys are pushed at the same time.
 
-## System80 improved keyin routine
- * The included ROM contains Dick Smith System80 improved keyin routine at /12288 but it doesn't seem to work well (key repeat is too fast at higher clock speeds)
- * Refer to the System80 manual for details about this.
-
-## System80 Debugger in the ROM 
- * The debugger can be loaded with "SYSTEM" then "/12710" at the prompt;
+## System80 
+If you use a System80 ROM 
+ * Dick Smith System80 improved keyin routine at /12288 misbehave at higher clock speeds)
+ * The System80 debugger can be loaded with "SYSTEM" then "/12710" at the prompt;
  * Refer to the System80 manual for details about this. 
 
 ## Technical:
