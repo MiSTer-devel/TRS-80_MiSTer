@@ -37,7 +37,8 @@ module fdc1771 (
 	input      [3:0] floppy_drive,
 	input            floppy_side, 
 	input            floppy_reset,
-	input			 motor_on,
+	input			 	  motor_on,
+	input				  spt9,
 
 	// interrupts
 	output reg       irq,
@@ -81,9 +82,13 @@ module fdc1771 (
 
 parameter SYS_CLK = 42578000;
 
-localparam SECTOR_BASE = 1'b0; // number of first sector on track (archie,trs80 0, dos 1) 
+// localparam SECTOR_BASE = 1'b0; // number of first sector on track (archie,trs80 0, dos 1) 
 localparam MAX_TRACK = 8'd250;	// A seek for a track above this will throw RNF
+wire [31:0] sd_lba0 ;
+wire [1:0] sd_lbaOFF ;
 
+
+wire SECTOR_BASE = spt9 ; // if CP/M sectorbase=1
 wire [31:0] CLK_EN = (SYS_CLK / 1000)/clk_div;	// Clock in Khz adjusted for CPU speed
 // -------------------------------------------------------------------------
 // --------------------- IO controller image handling ----------------------
@@ -107,10 +112,14 @@ end
 
 // Sector size handler
 logic [1:0] sector_size_code = 2'd1; // sec size 0=128, 1=256, 2=512, 3=1024
+
 always @(*) begin
-	if(controller_type==0) sector_size_code = 2'b01; // 256 bytes
-	else sector_size_code = 2'b10;	// 512 bytes
+	if(spt9==0) sector_size_code = 2'b01; // 256 bytes
+		else sector_size_code = 2'b00;	// 128 bytes
+//	if(controller_type==0) sector_size_code = 2'b01; // 256 bytes
+//		else sector_size_code = 2'b10;	// 512 bytes
 end
+
 logic [10:0] sector_size;
 assign sector_size = 11'd128 << sector_size_code;
 
@@ -125,13 +134,25 @@ end
 
 // Rework this to be generic
 always @(*) begin
+	sd_lba0 = ((fd_spt*track[7:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + (sector[4:0] - SECTOR_BASE) ;
 	case(sector_size_code)
+		// CP/M - 128 bytes
+		2'b00: begin
+					sd_lba = {2'b00, sd_lba0[31:2]} ;
+					sd_lbaOFF = sd_lba0[1:0] ;
+				 end
 		// TRS-80 - 256 bytes
-		2'b01: sd_lba = (((fd_spt*track[7:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0] >> 1);
+		2'b01: begin
+					sd_lba = {1'b0, sd_lba0[31:1]} ;
+					sd_lbaOFF = {1'b0, sd_lba0[0]} ;
+				 end
 		// Atari ST - 1024 bytes
 		// 2'b11: sd_lba = {(16'd0 + (fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0], s_odd };
 		// Other
-		default: sd_lba = ((fd_spt*track[6:0]) << fd_doubleside) + (floppy_side ? 5'd0 : fd_spt) + sector[4:0];
+		default: begin
+						sd_lba = sd_lba0 ;
+						sd_lbaOFF = 2'b00 ;
+					end
 	endcase
 end
 
@@ -151,12 +172,12 @@ wire floppy_write_protected = (floppy_drive == 4'b1110)?img_wp[0]:
 
 //wire floppy_write_protected = 1'b1 /* synthesis keep */;
 
-reg  [10:0] sector_len[4];
-reg   [4:0] spt[4];     // sectors/track
-reg   [9:0] gap_len[4]; // gap len/sector
+// reg  [10:0] sector_len[4];
+// reg   [4:0] spt[4];     // sectors/track
+// reg   [9:0] gap_len[4]; // gap len/sector
 reg  [22:0] mounted_size[4] ; // size of mounted image per slot, in sectors
-reg   [3:0] doubleside;
-reg   [7:0] hd;
+// reg   [3:0] doubleside;
+// reg   [7:0] hd;
 
 // wire [11:0] image_sectors = controller_type ? img_size[20:9] : img_size[19:8] /* synthesis keep */; // SE - Adjusted for 256 byte sectors
 // reg  [11:0] image_sps; // sectors/side
@@ -192,7 +213,8 @@ always @(*) begin
 		//	800 : image_spt = 5'd10;	// SD Floppy - 80 tracks
 		//	default : image_spt = 5'd10;
 		//endcase;
-		image_spt = 5'd10;
+		if (spt9) image_spt = 5'd18 ; else // 18 sectors per track for CP/M Omikron
+					image_spt = 5'd10;
 
 		//if (image_hd) image_spt = image_spt << 1'b1;
 
@@ -216,38 +238,38 @@ always @(posedge clk_sys) begin
 	if (~img_mountedD[0] && img_mounted[0]) begin
 		floppy_ready[0] <= |img_size;
 		mounted_size[0] <= img_size[31:9] ;
-		sector_len[0] <= sector_size;
-		spt[0] <= image_spt;
-		gap_len[0] <= image_gap_len;
-		doubleside[0] <= image_doubleside;
-		hd[1:0] <= image_hd;
+	//	sector_len[0] <= sector_size;
+	//	spt[0] <= image_spt;
+	//	gap_len[0] <= image_gap_len;
+	//	doubleside[0] <= image_doubleside;
+	//	hd[1:0] <= image_hd;
 	end
 	if (~img_mountedD[1] && img_mounted[1]) begin
 		floppy_ready[1] <= |img_size;
 		mounted_size[1] <= img_size[31:9] ;
-		sector_len[1] <= sector_size;
-		spt[1] <= image_spt;
-		gap_len[1] <= image_gap_len;
-		doubleside[1] <= image_doubleside;
-		hd[3:2] <= image_hd;
+	//	sector_len[1] <= sector_size;
+	//	spt[1] <= image_spt;
+	//	gap_len[1] <= image_gap_len;
+	//	doubleside[1] <= image_doubleside;
+	//	hd[3:2] <= image_hd;
 	end
 	if (~img_mountedD[2] && img_mounted[2]) begin
 		floppy_ready[2] <= |img_size;
 		mounted_size[2] <= img_size[31:9] ;
-		sector_len[2] <= sector_size;
-		spt[2] <= image_spt;
-		gap_len[2] <= image_gap_len;
-		doubleside[2] <= image_doubleside;
-		hd[5:4] <= image_hd;
+	//	sector_len[2] <= sector_size;
+	//	spt[2] <= image_spt;
+	//	gap_len[2] <= image_gap_len;
+	//	doubleside[2] <= image_doubleside;
+	//	hd[5:4] <= image_hd;
 	end
 	if (~img_mountedD[3] && img_mounted[3]) begin
 		floppy_ready[3] <= |img_size;
 		mounted_size[3] <= img_size[31:9] ;
-		sector_len[3] <= sector_size;
-		spt[3] <= image_spt;
-		gap_len[3] <= image_gap_len;
-		doubleside[3] <= image_doubleside;
-		hd[7:6] <= image_hd;
+	//	sector_len[3] <= sector_size;
+	//	spt[3] <= image_spt;
+	//	gap_len[3] <= image_gap_len;
+	//	doubleside[3] <= image_doubleside;
+	//	hd[7:6] <= image_hd;
 	end
 end
 
@@ -319,11 +341,11 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy0 (
 	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
-	.sector_len  ( sector_len[0]   ),
-	.spt         ( spt[0]          ),
-	.sector_gap_len ( gap_len[0]   ),
+	.sector_len  ( sector_size     ),
+	.spt         ( image_spt       ),
+	.sector_gap_len( image_gap_len ),
 	.sector_base ( SECTOR_BASE     ),
-	.density     ( hd[1:0]           ),
+	.density     ( image_hd        ),
 
 	// status signals generated by floppy
 	.dclk_en     ( fd0_dclk        ),
@@ -360,11 +382,11 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy1 (
 	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
-	.sector_len  ( sector_len[1]   ),
-	.spt         ( spt[1]          ),
-	.sector_gap_len ( gap_len[1]   ),
+	.sector_len  ( sector_size     ),
+	.spt         ( image_spt       ),
+	.sector_gap_len( image_gap_len ),
 	.sector_base ( SECTOR_BASE     ),
-	.density     ( hd[3:2]           ),
+	.density     ( image_hd        ),
 
 	// status signals generated by floppy
 	.dclk_en     ( fd1_dclk        ),
@@ -401,11 +423,11 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy2 (
 	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
-	.sector_len  ( sector_len[2]   ),
-	.spt         ( spt[2]          ),
-	.sector_gap_len ( gap_len[2]   ),
+	.sector_len  ( sector_size     ),
+	.spt         ( image_spt       ),
+	.sector_gap_len( image_gap_len ),
 	.sector_base ( SECTOR_BASE     ),
-	.density     ( hd[5:4]           ),
+	.density     ( image_hd        ),
 
 	// status signals generated by floppy
 	.dclk_en     ( fd2_dclk        ),
@@ -442,11 +464,11 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy3 (
 	.clk_div 	 ( clk_div		   ),
 
 	// physical parameters
-	.sector_len  ( sector_len[3]   ),
-	.spt         ( spt[3]          ),
-	.sector_gap_len ( gap_len[3]   ),
+	.sector_len  ( sector_size     ),
+	.spt         ( image_spt       ),
+	.sector_gap_len( image_gap_len ),
 	.sector_base ( SECTOR_BASE     ),
-	.density     ( hd[7:6]           ),
+	.density     ( image_hd        ),
 
 	// status signals generated by floppy
 	.dclk_en     ( fd3_dclk        ),
@@ -520,15 +542,17 @@ wire [22:0] mntd_size = (!floppy_drive[0])?mounted_size[0]:
                        23'd0;							  
 							  
 							  
-wire fd_doubleside =   (!floppy_drive[0])?doubleside[0]:
-							  (!floppy_drive[1])?doubleside[1]:
-							  (!floppy_drive[2])?doubleside[2]:
-								doubleside[3];
+wire fd_doubleside =  image_doubleside ;
+// wire fd_doubleside =   (!floppy_drive[0])?doubleside[0]:
+//							  (!floppy_drive[1])?doubleside[1]:
+//							  (!floppy_drive[2])?doubleside[2]:
+//								doubleside[3];
 								
-wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:
-								(!floppy_drive[1])?spt[1]:
-								(!floppy_drive[2])?spt[2]:
-								spt[3];
+wire [4:0]  fd_spt =  image_spt ;
+//wire [4:0]  fd_spt =   (!floppy_drive[0])?spt[0]:
+//								(!floppy_drive[1])?spt[1]:
+//								(!floppy_drive[2])?spt[2]:
+//								spt[3];
 
 wire fd_track0 = (fd_track == 0);
 
@@ -801,8 +825,8 @@ always @(posedge clk_sys) begin
 								sector_not_found <= 1'b1;
 								delay_cnt <= 24'd100 * CLK_EN;
 							end else begin
-								// Read before write handling for 256 byte sectors
-								if (sector_size_code == 2'b01) begin
+								// Read before write handling for 256 or 128 byte sectors
+								if (sector_size_code[1] == 1'b0) begin
 									// Stage 0, read SD card
 									if (fifo_cpuptr == 0 && read_bf_write==1'b0 && !sd_card_done) sd_card_read <= 1'b1;
 									// Stage 1, read SD card done
@@ -812,7 +836,7 @@ always @(posedge clk_sys) begin
 									end
 								end
 								// Read data from CPU into dpram
-								if (sector_size_code != 2'b01 || read_bf_write==1'b1) begin									
+								if (sector_size_code[1] != 1'b0 || read_bf_write==1'b1) begin									
 									if (fifo_cpuptr==0) data_transfer_start <= 1'b1;
 									if (data_transfer_done) sd_card_write <= 1;
 									if (sd_card_done) begin
@@ -925,7 +949,8 @@ dpram #(.ADDR(9), .DATA(8)) fifo
 
 	.b_clk(clk_sys),
 	.b_wr(writing_mem),
-	.b_addr({controller_type ? fifo_cpuptr[8] : sector[0], fifo_cpuptr[7:0]}),
+//	.b_addr({controller_type ? fifo_cpuptr[8] : sector[0] ^ SECTOR_BASE, fifo_cpuptr[7:0]}),
+	.b_addr({ (sector_size_code==2'b00) ? sd_lbaOFF : (sector_size_code==2'b01) ? {sd_lbaOFF[0],fifo_cpuptr[7]} : fifo_cpuptr[8:7] , fifo_cpuptr[6:0]}),
 	.b_din(data_in),
 	.b_dout(fifo_q)
 );

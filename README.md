@@ -94,6 +94,13 @@ If you use a System80 ROM
  * The System80 debugger can be loaded with "SYSTEM" then "/12710" at the prompt;
  * Refer to the System80 manual for details about this. 
 
+## Omikron CP/M Mapper
+If you provide an Omikron Mapper ROM as boot1.rom placed in games/TRS-80/, setting this option will run the Omikron Mapper and hopefully load CP/M from the Omikron disk.
+See the discussion at https://github.com/MiSTer-devel/TRS-80_MiSTer/issues/43 for more details and possible ressources.
+ * disk images must be RAW (.DSK, .JV1) 128 bytes/sector, 18 sectors/track, Single-sided, 35 to 80 tracks.
+ * disk images must have a size being an exact multiple of 512 (the MiSTer SD sector size), so every 35 track disk must be padded with 256 bytes to comply. The odd 71-tracks disks too, but I never saw one.
+ * 80-tracks disks have been tested successfully.
+
 ## Technical:
 Debug status line
  * The Debug Status line will only be visible in Partial or Full overscan modes
@@ -111,9 +118,9 @@ Debug status line
 
 Special ports (i.e. Z-80 "OUT"/"IN" commands) have been added as follows:
  * VIDEO:
-   * OUT 0, n (where n=(0-7)) -> change foreground color
-   * OUT 1, n (where n=(0-7)) -> change bacgronund color
+   * OUT 1, n (where n=(0-7)) -> change background color
    * OUT 2, n (where n=(0-7)) -> change overscan color
+   * OUT 3, n (where n=(0-7)) -> change foreground color
 
  * Memory-mapped cassette:
    * OUT 6, n (where n=(0-255)) -> set address bits 23-16 of virtual memory pointer

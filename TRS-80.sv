@@ -193,7 +193,7 @@ assign LED_USER  = ioctl_download;
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXX         XXXXXXXXXX
+// XXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -236,6 +236,7 @@ localparam CONF_STR = {
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
 	"O89,Clockspeed (MHz),1.78(1x),3.56(2x),5.34(3x),21.29(12x);",
+	"OO,Omikron CP/M,off,on;",
 	"-;",
 	"RG,Erase memory and reset;",
 	"R0,Reset;",
@@ -340,7 +341,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 );
 
 wire rom_download = ioctl_download && ioctl_index==0;
-wire reset = RESET | status[0] | buttons[1] | rom_download;
+wire reset = RESET | status[0] | buttons[1] | rom_download | (old_omikron != status[24]);
 
 // signals from loader
 wire loader_wr;		
@@ -355,6 +356,8 @@ wire prev_status_15 ;
 wire [15:0] dgb_min_addr;
 wire [15:0] dgb_max_addr;
 wire [15:0] prev_execute_addr;
+wire old_omikron ;
+
 
 //(* preserve *) wire [31:0] iterations;
 always_ff @(posedge clk_sys or posedge reset) begin
@@ -372,6 +375,10 @@ always_ff @(posedge clk_sys or posedge reset) begin
 		if (execute_addr != prev_execute_addr) debug_select_line <= 1'b1 ;  // if exec_addr change, see it.
 		if (ioctl_download && ioctl_wr && ioctl_index==3 && ioctl_addr[0] == 1'b1 ) menumask[1] <= 1'b0 ;
 	end
+end
+
+always @(posedge clk_sys) begin
+	old_omikron <= status[24];
 end
 
 cmd_loader cmd_loader
@@ -407,7 +414,7 @@ cmd_loader cmd_loader
 wire trsram_wr;			// Writing loader data to ram 
 wire trsram_rd;			// Reading loader data from ram 
 wire trsram_download;	// Download in progress (active high)
-wire [23:0] trsram_addr;
+wire [16:0] trsram_addr;
 wire [7:0] trsram_data;
 wire [7:0] trsram_din;
 
@@ -415,10 +422,10 @@ wire [15:0] dbg_min_addr ;
 wire [15:0] dbg_max_addr ;
 wire [15:0] exec_stack ;
 
-assign trsram_wr = loader_download ? loader_wr : |ioctl_index[5:1]==1'b0 ?  ioctl_wr : 1'b0 ; // we don't want a spurious write if loader_download is late
+assign trsram_wr = loader_download ? loader_wr : |ioctl_index[7:1]==1'b0 ?  ioctl_wr : 1'b0 ; // we don't want a spurious write if loader_download is late
 assign trsram_rd = loader_download ;
 assign trsram_download = loader_download ? loader_download : ioctl_index == 1 ? ioctl_download : 1'b0;
-assign trsram_addr = loader_download ? {8'b0, loader_addr} : {7'b0,|ioctl_index[5:0],ioctl_addr};
+assign trsram_addr = loader_download ? {1'b0, loader_addr} : {|ioctl_index[7:0],ioctl_addr};
 assign trsram_data = loader_download ? loader_data : ioctl_data;
 
 wire LED;
@@ -432,16 +439,39 @@ wire       fdc_rw;
 wire [7:0] fdc_din;
 wire [7:0] fdc_dout;
 
+wire [10:0] omkr_addr ;
+wire [7:0]  omkr_data ;
+
 // Map all such broken accesses to drive A only
 //wire [1:0] floppy_sel = 2'b10;	// ** Need to change from code
 
 //wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
+
+//  Omikron alternate ROM loading 
+dpram #(.DATA(8), .ADDR(11)) omikron_rom
+(
+    .a_clk(clk_sys),
+    .a_wr(ioctl_wr & (ioctl_index[7:0]==8'h40)),  // file 0, rom 01 = Omikron
+    .a_addr(ioctl_addr[10:0]),
+    .a_din(ioctl_data),
+   // .a_dout(),
+
+    // Port B
+    .b_clk(clk_sys),
+    .b_wr(1'b0),
+    .b_addr(omkr_addr),
+    .b_din(8'ha5),
+    .b_dout(omkr_data)
+);
 
 trs80 trs80
 (
 	.reset(reset),
 	.clk42m(clk_sys),
 	.cpum1_out(cpum1),
+	.omikron(status[24]),
+	.omkr_addr(omkr_addr),
+	.omkr_data(omkr_data),
 
 	.joy0(joystick_0),
 	.joy1(joystick_1),
