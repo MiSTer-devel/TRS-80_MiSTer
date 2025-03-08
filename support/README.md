@@ -29,6 +29,6 @@ It also contains a Omikron CP/M version of MrUnzip.com, the same light version w
 
 ### License
 
- The original licebse of UNZIP CPM apply, (i.e. none).
+ The original license of UNZIP CPM apply, (i.e. none).
  https://github.com/agn453/UNZIP-CPM-Z80/blob/master/LICENSE
 
