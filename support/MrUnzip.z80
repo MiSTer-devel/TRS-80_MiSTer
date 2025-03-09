@@ -3,7 +3,7 @@
 ;	Dissolves MS-DOS ZIP files.
 ;
 ; Can be assembled with Z80asm from z88dk :
-; 	z80asm -mz80 -b -m -l -r=0x7000 Mr_Unzip.asm
+; 	z80asm -mz80 -b -m -l -r=0x7000 Mr_Unzip.z80
 ;	head -c 4608 Mr_Unzip.bin > Mr_Unzip.bin0
 ;	bin2cmd Mr_Unzip.bin0 7000 7000  
 ;
@@ -2740,6 +2740,7 @@ dist_tre:
 	ds	16384 + 2 - (3 * _sf_tree_)
 followers:
 ;stack:	ds	8192 - 2
+stack:	ds	3372 - 2
 lenld:	ds	nrlit + nrdist
 cltr:	ds	4 * nrcl
 littr:	ds	4 * nrlit

@@ -2792,6 +2792,7 @@ dist_tre:
 	ds	16384 + 2 - (3 * _sf_tree_)
 followers:
 ;stack:	ds	8192 - 2
+stack:	ds	3372 - 2
 lenld:	ds	nrlit + nrdist
 cltr:	ds	4 * nrcl
 littr:	ds	4 * nrlit
