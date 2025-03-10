@@ -51,8 +51,12 @@ Port (
 	clk42m     : in  STD_LOGIC;
 	cpum1_out  : out STD_LOGIC;
 	omikron	  : in  std_logic;
-	omkr_addr  : out std_logic_vector(10 downto 0) ;
+	omkr_addr  : out std_logic_vector(13 downto 0) ;
 	omkr_data  : in  std_logic_vector(7 downto 0) ;
+--	omkr_out   : out std_logic_vector(7 downto 0) ;
+--	omkr_wr	  : out STD_LOGIC;
+--	omkr_write : in  STD_LOGIC;
+	reset_mapper: in  std_logic;
 	
 	RGB        : out STD_LOGIC_VECTOR (23 downto 0);
 	HSYNC      : out STD_LOGIC;
@@ -525,6 +529,7 @@ DIRZ80 <= DIR when ss_sel = '0' else SS_DIR ;
 DIRSetZ80 <= DIRSet when ss_sel = '0' else ss_DIRSet ;
 cpum1_out <= cpum1 ;
 exec_stack <= REG(63 downto 48) ;
+-- omkr_out <= cpudo ; 
 
 regset : z80_regset
 port map
@@ -847,9 +852,9 @@ port map
 );
 
  -- Omikron addresses mixology
-process(clk42m, reset)
+process(clk42m, reset_mapper)
 begin
-	if reset='1' then
+	if reset_mapper='1' or omikron='0' then
 		omkr_port <= "00000000" ;
 	else
 		if rising_edge(clk42m) then
@@ -865,7 +870,9 @@ end process;
  cpua(14) <= cpua80(14) when (omikron='0' or omkr_port(2)='0') else not cpua80(15) ; -- warning 15 and not 14, its not a typo  
  cpua(15) <= cpua80(15) when (omikron='0' or omkr_port(2)='0') else not cpua80(14) ; -- 00->11, 01->01, 10->10, 11->00
  omkr_sel <= '1' when omikron='1' and omkr_port(3)='0' and cpua(15 downto 14)="00" else '0' ;
- omkr_addr <= cpua80(10 downto 0) ;
+ omkr_addr <= cpua80(13 downto 0) ;
+-- omkr_wr <= (not memw) and cpua(15) and cpua(14) and omikron and not omkr_port(3) and omkr_port(2) and omkr_write ;
+
  
  -- CPU Input
  
@@ -987,9 +994,13 @@ begin
 --		when 44 => dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4))); 
 --		when 45 => dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0))); 
 		when 42 => dbugmsg_data <= hex(conv_integer(cpua(15 downto 12))); 
-		when 43 => dbugmsg_data <= hex(conv_integer(cpua(11 downto 8))); 
-		when 44 => dbugmsg_data <= hex(conv_integer(cpua(7 downto 4))); 
-		when 45 => dbugmsg_data <= hex(conv_integer(cpua(3 downto 0))); 		
+		when 43 => dbugmsg_data <= hex(conv_integer(omikron)); 
+		when 44 => dbugmsg_data <= hex(conv_integer(omkr_port(7 downto 4))); 
+		when 45 => dbugmsg_data <= hex(conv_integer(omkr_port(3 downto 0))); 		
+--		when 42 => dbugmsg_data <= hex(conv_integer(cpua(15 downto 12))); 
+--		when 43 => dbugmsg_data <= hex(conv_integer(cpua(11 downto 8))); 
+--		when 44 => dbugmsg_data <= hex(conv_integer(cpua(7 downto 4))); 
+--		when 45 => dbugmsg_data <= hex(conv_integer(cpua(3 downto 0))); 		
 		when 47 => if(tick_1s='0') then dbugmsg_data <= x"20"; else dbugmsg_data <= x"2a"; end if;
 		--
 		-- otherwise split the remainder: first half just reads from the default text buffer,

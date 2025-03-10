@@ -236,7 +236,8 @@ localparam CONF_STR = {
 	"O4,Kbd Layout,TRS-80,PC;",
 	"OAB,TRISSTICK,None,BIG5,ALPHA;",
 	"O89,Clockspeed (MHz),1.78(1x),3.56(2x),5.34(3x),21.29(12x);",
-	"OO,Omikron CP/M,off,on;",
+	"OO,Omikron CP/M,Off,On;",
+//	"OP,Omikron Write,Off,On;",
 	"-;",
 	"RG,Erase memory and reset;",
 	"R0,Reset;",
@@ -341,7 +342,8 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(0), .VDNUM(NBDRIV) ) hps_io
 );
 
 wire rom_download = ioctl_download && ioctl_index==0;
-wire reset = RESET | status[0] | buttons[1] | rom_download | (old_omikron != status[24]);
+wire CPMreset = RESET | rom_download | omkr_reset;
+wire reset = status[0] | buttons[1] | CPMreset ;
 
 // signals from loader
 wire loader_wr;		
@@ -357,13 +359,15 @@ wire [15:0] dgb_min_addr;
 wire [15:0] dgb_max_addr;
 wire [15:0] prev_execute_addr;
 wire old_omikron ;
+wire omkr_reset ;
+wire [3:0] omkr_ctr ; 
 
 
 //(* preserve *) wire [31:0] iterations;
 always_ff @(posedge clk_sys or posedge reset) begin
 	if (reset) begin
 		debug_select_line <= 1'b0 ; 
-		prev_execute_addr <= 16'h0000 ;
+		prev_execute_addr <= execute_addr ;
 		if (rom_download) menumask <= 16'h0002 ; // menumask[1]=1
 	end else
 	begin
@@ -377,8 +381,13 @@ always_ff @(posedge clk_sys or posedge reset) begin
 	end
 end
 
-always @(posedge clk_sys) begin
-	old_omikron <= status[24];
+always_ff @(posedge clk_sys) begin
+		old_omikron <= status[24];
+		if (old_omikron != status[24]) omkr_ctr <= 4'hf ;
+		if (omkr_ctr != 4'h0) begin
+			omkr_ctr <= omkr_ctr - 1 ;
+			omkr_reset <= 1'b1 ;
+		end  else omkr_reset <= 1'b0 ;
 end
 
 cmd_loader cmd_loader
@@ -439,7 +448,7 @@ wire       fdc_rw;
 wire [7:0] fdc_din;
 wire [7:0] fdc_dout;
 
-wire [10:0] omkr_addr ;
+wire [13:0] omkr_addr ;
 wire [7:0]  omkr_data ;
 
 // Map all such broken accesses to drive A only
@@ -458,9 +467,10 @@ dpram #(.DATA(8), .ADDR(11)) omikron_rom
 
     // Port B
     .b_clk(clk_sys),
+    //.b_wr(omkr_wr),
     .b_wr(1'b0),
-    .b_addr(omkr_addr),
-    .b_din(8'ha5),
+    .b_addr(omkr_addr[10:0]),
+    .b_din(8'h00),
     .b_dout(omkr_data)
 );
 
@@ -472,6 +482,9 @@ trs80 trs80
 	.omikron(status[24]),
 	.omkr_addr(omkr_addr),
 	.omkr_data(omkr_data),
+//	.omkr_wr(omkr_wr),
+//	.omkr_write(status[25]),
+	.reset_mapper(CPMreset),
 
 	.joy0(joystick_0),
 	.joy1(joystick_1),

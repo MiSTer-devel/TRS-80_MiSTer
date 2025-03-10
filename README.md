@@ -96,11 +96,13 @@ If you use a System80 ROM
 
 ## Omikron CP/M Mapper
 If you provide an Omikron Mapper ROM as boot1.rom placed in games/TRS-80/, setting this option will run the Omikron Mapper and hopefully load CP/M from the Omikron disk.
+You will probably need to do a "Erase memory and Reset" after enabling the Omikron mapper to get the menu ("Reset" won't work at this point, because it's routed to reset the CPM machine only when Omikron is active).
 See the discussion at https://github.com/MiSTer-devel/TRS-80_MiSTer/issues/43 for more details and possible ressources.
  * disk images must be RAW (.DSK, .JV1) 128 bytes/sector, 18 sectors/track, Single-sided, 35 to 80 tracks.
  * disk images must have a size being an exact multiple of 512 (the MiSTer SD sector size), so every 35 track disk must be padded with 256 bytes to comply. The odd 71-tracks disks too, but I never saw one. With linux or MiSTer, this can be achieved with this command :
    ```dd if=/dev/zero bs=256 count=1 >> MYDISK.DSK```
- * 80-tracks disks have been tested successfully.
+ * 80-tracks disks have been tested successfully, you'll find one in the "support" directory.
+ * MrUnzip has been ported to CP/M to ease file migration (see "support/CPM")
 
 ## Technical:
 Debug status line
