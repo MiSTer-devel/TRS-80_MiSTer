@@ -575,7 +575,7 @@ begin
 				end if;					  
 				if iorq='0' and wr='0' and a(7 downto 2)="000000" then
 					case a(1 downto 0) is
-						when "00"=> ink<=din(3 downto 0);
+						when "11"=> ink<=din(3 downto 0);
 						when "01"=> paper<=din(3 downto 0);
 						when "10"=> border<=din(3 downto 0);		  
 						when others=>null;

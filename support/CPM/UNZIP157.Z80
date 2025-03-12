@@ -2,27 +2,18 @@
 ;
 ;	Dissolves MS-DOS ZIP files.
 ;
-; Can be assembled with Z80asm from z88dk :
-; 	z80asm -mz80 -b -m -l -r=0x7000 Mr_Unzip.asm
-;	head -c 4736 Mr_Unzip.bin > Mr_Unzip.bin0
-;	bin2cmd Mr_Unzip.bin0 7000 7000  
+; Can be assembled with ZMAC with:
+;	ZMAC -o UNZIP.COM UNZIP156.Z80
 ;
-;
-#define FASTQUIT 0	; Quit as soon as end of data section
-#define CCPQUIT  0	; Returns to CCP instead of WARM
+FASTQUIT  equ	1	; Quit as soon as end of data section
+CCPQUIT   equ   1	; Returns to CCP instead of WARM
 
-Vers:	equ	15
-Revisn:	equ	7		;;v1.5-7
-VersDD:	equ	22
-VersMM:	equ	10
-VersYY:	equ	2023
+Vers	equ	15
+Revisn	equ	7		;;v1.5-7
+VersDD	equ	22
+VersMM	equ	10
+VersYY	equ	2023
 
-; Version MiSTer 1.0 : 10 december 2024 - theflynn49
-;   	Port of this version for the TRS80 model I core found in MiSTer
-;	- removed  all the options/parms mechanism
-;	- removed imploding because it's too memory consuming
-;	- replaced file-input by the core Cassette channel
-;	- replaced all CPM disk I/O by calls to TRSDOS routines 
 ;
 ; Version 1.5-7 -- 22 October 2023 -- Stefano and Tony Nicholson
 ;	Some code size optimisations.
@@ -149,59 +140,77 @@ VersYY:	equ	2023
 ;
 ; System addresses
 ;
-wboot:	equ	0
-;bdos:	equ	exit
+wboot	equ	0
+bdos	equ	5
+infcb	equ	5Ch
+altfcb	equ	6Ch
 ;
 ; BDOS service functions
 ;
-conout:	equ	2
-dircon:	equ	6
-fopen:	equ	15
-fclose:	equ	16
-ferase:	equ	19
-fread:	equ	20
-fwrite:	equ	21
-fmake:	equ	22
-getdrv:	equ	25
-setdma:	equ	26
-setusr:	equ	32
+conout	equ	2
+dircon	equ	6
+fopen	equ	15
+fclose	equ	16
+ferase	equ	19
+fread	equ	20
+fwrite	equ	21
+fmake	equ	22
+getdrv	equ	25
+setdma	equ	26
+setusr	equ	32
 ;
 ; Other
 ;
-STRSIZ:	equ	256		; must be 256 exactly, see plfh for why
-DLE:	equ	144
-max_bits: equ	13
-init_bits: equ	9
-hsize:	equ	8192
-first_ent: equ	257
-clear:	equ	256
-maxcmax:	equ	2000h  ; 1 shl max_bits
-maxSF:	equ	256
-_code:	equ	0
-_value:	equ	2
-_bitlength: equ	3
-_entries: equ	0
-_maxlength: equ	2
-_entry:	equ	4
-_sf_tree_: equ	264  ; 4 + 4 * maxSF
-maxcl:	equ	16
-nrcl:	equ	19
-nrlit:	equ	288
-nrdist:	equ	32
+STRSIZ	equ	256		; must be 256 exactly, see plfh for why
+DLE	equ	144
+max_bits equ	13
+init_bits equ	9
+hsize	equ	8192
+first_ent equ	257
+clear	equ	256
+maxcmax	equ	1 shl max_bits
+maxSF	equ	256
+_code	equ	0
+_value	equ	2
+_bitlength equ	3
+_entries equ	0
+_maxlength equ	2
+_entry	equ	4
+_sf_tree_ equ	4 + 4 * maxSF
+maxcl	equ	16
+nrcl	equ	19
+nrlit	equ	288
+nrdist	equ	32
 ;
 ; ASCII
 ;
-CtrlC:	equ	03h
-CR:	equ	0Dh
-;LF:	equ	0Ah
-CtrlZ:	equ	1Ah
+CtrlC	equ	03h
+CR	equ	0Dh
+LF	equ	0Ah
+CtrlZ	equ	1Ah
 ;
-;	aseg
-	org	7000h
+	aseg
+	org	100h
 ;
+	jp	start
+;
+	db	'Z3ENV',1
+Z3EAdr:	dw	0
 ;
 start:	ld	(oldstk),sp	; save old stack here for future use
-	ld	sp,(04049h)		; set the stack pointer
+if CCPQUIT
+	ld	hl,(6)		; get top of memory
+	ld	de,0f800h	; allow space for CCP
+	add	hl,de
+	ld	sp,hl		; set the stack pointer
+else
+	ld	sp,(6)		; set the stack pointer
+endif
+	ld	a,(infcb+1)	; filename?
+	cp	' '
+	jp	z,usage		; no filename - display usage
+	cp	'/'
+	jp	z,usage		; UNZIP /?  - display usage
 ;
 ; Check TPA size (this will need adjusting if warm-boot-only exit
 ; is changed).
@@ -212,51 +221,97 @@ start:	ld	(oldstk),sp	; save old stack here for future use
 	or	a
 	sbc	hl,de		; check endaddr is less (i.e. hl is >=)
 	jp	c,nomem
-
-        xor     a
-	ld	(opfcb),a	; disk number
-	call	ilprt
-	db	"MiSTer Unzip 1.0, based on Unzip for CPM v1.5.7",CR
-	db	"Enter destination disk : (0-3)<enter>",0
-	ld	b, 1
-	ld	hl,trsBUF
-	call	0040h
-	jr	c,exit
-	xor	a
-	or 	b
-	jr 	z,disk0
-	ld	a,(trsBUF)
-	and	a,3
-	ld	(opfcb),a
-disk0:
 ;
+	ld	hl,0080h	; command buffer
+	ld	l,(hl)		; get length
+	set	7,l		; point after end of line
+	inc	hl
+	ld	(hl),0		; put terminator in
+	ld	l,81h		; hl=>start of line
+optlp1:	ld	b,h		; b=0, options
+	ld	a,(hl)		; get character
+	inc	hl
+	cp	' '
+	jr	z,optlp1	; skip spaces
+	jr	c,optdone	; end of command line
+	cp	'['
+	jr	z,options	; start of options string
+optlp3:	ld	a,(hl)
+	inc	hl
+	cp	' '
+	jr	z,optlp1
+	jr	nc,optlp3	; skip filename
+	jr	optdone		; end of command line
+options:
+	ld	a,(hl)
+	inc	hl
+	cp	' '
+	jr	z,optlp1	; another filename
+	cp	'?'
+	jp	z,usage		; UNZIP [?] - display usage
+	and	05Fh		; upper case
+	jr	z,optdone	; end of command line
+	cp	']'
+	jr	nc,optdone	; end of options
+	or	b
+	ld	b,a
+	jr	options
+optdone:
+	ld	(opts-1),bc	; note options
 ; bit 1 = [O]verwrite
 ; bit 4 = [Q]uiet
 ;
-	ld 	a,2		; overwrite
-	ld	(opts),a
-;
-	ld	a,1
-	ld	(mode),a	; 0=list only  1=extract files
-;
-	ld	a,1
-	out     (6),a
-	xor	a
-	out	(5),a
-	out	(4),a    	; sets the vmem address to 0x10000 
-	jr	openok
+	ld	de,altfcb
+	ld	a,(de)		; output drive given?
+	ld	(opfcb),a	; store it in output file control block
+	ld	(mode),a	; set the mode (non-zero = extract)
+	call	getusr		; get input and output users, if ZCPR3
+	ld	hl,mtchfcb
+	ld	bc,11
+	inc	de
+	ld	a,(de)
+	cp	20h
+	jr	z,wildfill
+	ex	de,hl
+	ldir
+	ld	a,(altfcb)
+	or	a
+	jr	nz,filldn
+	ld	c,getdrv
+	call	bdos
+	inc	a
+	ld	(opfcb),a	; store it in output file control block
+	ld	(mode),a	; set the mode (non-zero = extract)
+	jr	filldn
+wildfill:
+	ld	b,c
+wildlp:	ld	(hl),'?'
+	inc	hl
+	djnz	wildlp
+filldn:	ld	a,(infcb+9)	; check for filetype
+	cp	20h
+	jr	nz,wasext
+	ld	hl,+('I' shl 8) + 'Z'	; set default type to ZIP
+	ld	(infcb+9),hl
+	ld	a,'P'
+	ld	(infcb+11),a
+wasext:	call	setin		; log input user
+	ld	de,infcb
+	ld	c,fopen
+	call	bdos		; try and open ZIP file
+	inc	a
+	jr	nz,openok	; ok
+	call	ilprt0
+	db	'Zipfile not found.',CR,LF,0
+	jr	exit
 ;
 nomem:	call	ilprt0		; complain and fall through to exit
-	db	"Not enough memory.",CR,0
+	db	'Not enough memory.',CR,LF,0
 ;
 ; All exits point here for possible future enhancements, such
 ; as elimination of warm boot.
 ;
-exit:	call	ilprt0		; complain and fall through to exit
-	db	"Press return to exit.",0
-	call	049h 	; KBWAIT
-	cp	a,CR
-	jr  	nz,exit
+exit:	
 if CCPQUIT
 	ld	sp,(oldstk)
 	ret
@@ -264,11 +319,8 @@ else
 	jp	wboot
 endif
 ;
-sigerr0:call	ilprt0
-	db	"No ZIP file in CAS mem.\r\n\0"
-	jr	exit
 sigerr:	call	ilprt0
-	db	"Zipfile corrupt.\r\n\0"
+	db	'Zipfile corrupt.',CR,LF,0
 	jr	exit
 ;
 ; Judging from https://en.wikipedia.org/wiki/Zip_(file_format)
@@ -282,11 +334,11 @@ sigerr:	call	ilprt0
 ; directory.
 ;
 openok:	call	getword
-	ld	de,-19280	; -(('K' shl 8) + 'P')		; magic number
+	ld	de,-(('K' shl 8) + 'P')		; magic number
 	add	hl,de
 	ld	a,h
 	or	l
-	jr	nz,sigerr0
+	jr	nz,sigerr
 	call	getword
 	dec	l		; check for 01,02 (central directory)
 	jr	nz,nocfhs
@@ -316,10 +368,10 @@ nolfhs:	dec	l		; check for 05,06 (end of central dir.)
 	sub	6
 	jr	nz,sigerr
 if FASTQUIT
-	jp	exit		; data block done, exit
+	jr	exit		; data block done, exit
 else
 	call	pecd
-	jp	exit
+	jr	exit
 endif
 ;
 ; (The belated-CRC type (07,08) is apparently not supported.)
@@ -473,51 +525,37 @@ mtched:	call	setout		; log output user
 	ld	a,(opts)
 	bit	1,a
 	jr	z,ifthere	; [O]verwrite off
-;	ld	c,ferase	; delete any existing file
-;	call	bdos
-	call	cp_fn_DCB
-	ld	de,trsDCB
-	ld	hl,trsBUF
-	ld	b,128
-	call	4424h	;Open
-	jr	z,saveit
-	ld	de,trsDCB
-	call	442Ch	;Kill
+	ld	c,ferase	; delete any existing file
+	call	bdos
 	jr	saveit
 ifthere:
-	call	cp_fn_DCB
-	ld	de,trsDCB
-	ld	hl,trsBUF
-	ld	b,128
-	call	4424h		;OPEN
-;	ld	c,fopen		; see if output file already exists
-;	call	bdos
-;	inc	a
-	jr	z,exists
-saveit:	
-;	ld	b,11
-;	ld	hl,opfn
-;	ld	de,mtchfcb
-;mtchlp:	ld	a,(de)
-;	ld	c,(hl)
-;	inc	hl
-;	inc	de
-;	cp	'?'
-;	jr	z,mtch1
-;	res	7,c
-;	cp	c
-;	jr	nz,nomtch
-;mtch1:	djnz	mtchlp
+	ld	c,fopen		; see if output file already exists
+	call	bdos
+	inc	a
+	jr	nz,exists
+saveit:	ld	b,11
+	ld	hl,opfn
+	ld	de,mtchfcb
+mtchlp:	ld	a,(de)
+	ld	c,(hl)
+	inc	hl
+	inc	de
+	cp	'?'
+	jr	z,mtch1
+	res	7,c
+	cp	c
+	jr	nz,nomtch
+mtch1:	djnz	mtchlp
 	jr	creok		; (nope, so continue)
-;nomtch:	ld	hl,junk
-;	call	pstr
-;	call	ilprt
-;	db	" doesnt match",0
-;	jr	noex
+nomtch:	ld	hl,junk
+	call	pstr
+	call	ilprt
+	db	' doesn''t match',0
+	jr	noex
 exists:	ld	hl,junk		; it exists, so skip it
 	call	pstr
 	call	ilprt
-	db	" -- exists",0
+	db	' -- exists',0
 	xor	a
 	ld	(curmode),a
 	ld	(zipeof),a
@@ -525,7 +563,7 @@ exists:	ld	hl,junk		; it exists, so skip it
 ;	jp	badskp
 
 noex:	call	ilprt
-	db	" -- not extracting  ",0
+	db	' -- not extracting  ',0
 	xor	a
 	jp	resmod
 ;
@@ -540,31 +578,24 @@ listit:	xor	a
 	jr	pjunk
 ;
 creok:	call	setout
-;	ld	de,opfcb	; create output file
-;	ld	c,fmake
-;	call	bdos
-	call	cp_fn_DCB
-	ld	de,trsDCB
-	ld	hl,trsBUF
-	ld	b,128
-	call	4420h	; INIT
-;	or	a
-	jr	z,opnok1
-;	inc	a
-;	jr	nz,opnok1
+	ld	de,opfcb	; create output file
+	ld	c,fmake
+	call	bdos
+	inc	a
+	jr	nz,opnok1
 	call	ilprt
-	db	"Error creating ",0
+	db	'Error creating ',0
 	ld	hl,junk
 	call	pstr
 	jr	noex
 ;
 opnok1:
 ;	call	ilprt
-;	db	"Extracting \0"
+;	db	'Extracting ',0
 pjunk:	ld	hl,junk		; print filename
 	call	pstr
 doext:	call	ilprt
-	db	" -- ",0
+	db	' -- ',0
 doext2:	ld	hl,(cs)
 	ld	de,(cs + 2)
 	ld	a,d
@@ -583,7 +614,7 @@ neof:	inc	hl
 	or	a
 	jr	z,caseck
 	call	ilprt
-	db	"extracting ",0
+	db	'extracting ',0
 caseck:	ld	a,(cm)
 	or	a
 	jr	nz,case1
@@ -605,10 +636,9 @@ case2p:	dec	a
 	call	unreduce
 	jr	closeo
 ;
-tryimp:	
-;	jr	nz,trydfl
-;	call	unimplode
-;	jr	closeo
+tryimp:	jr	nz,trydfl
+	call	unimplode
+	jr	closeo
 ;
 trydfl:	cp	6
 	jr	nz,badzip
@@ -616,7 +646,7 @@ trydfl:	cp	6
 	jr	closeo
 ;
 badzip:	call	ilprt
-	db	"unknown compression method",CR,0
+	db	'unknown compression method',CR,LF,0
 badskp:	ld	a,(zipeof)
 	and	1
 	jr	nz,closeo
@@ -625,17 +655,14 @@ badskp:	ld	a,(zipeof)
 
 ;
 open_wr:
-;	ld	de,opbuf
-;	ld	c,setdma
-;	call	bdos
+	ld	de,opbuf
+	ld	c,setdma
+	call	bdos
 	call	setout
-;	ld	de,opfcb
-;	ld	c,fwrite
-;	jp	bdos
-	ld	de,trsDCB
-	ld	hl,opbuf
-	call	4439h		; WRITE
-	ret
+	ld	de,opfcb
+	ld	c,fwrite
+	jp	bdos
+
 ;
 closeo:	ld	hl,zipeof
 	dec	(hl)
@@ -651,15 +678,13 @@ closeo:	ld	hl,zipeof
 	jr	z,noflsh
 	call	open_wr
 noflsh:	call	setout
-;	ld	de,opfcb
-;	ld	c,fclose
-;	call	bdos
-	ld	de,trsDCB
-	call	4428h		; CLOSE
+	ld	de,opfcb
+	ld	c,fclose
+	call	bdos
 nocls:	ld	hl,crc32
 	ld	de,crc
 	scf
-	ld	bc,400h   ; 4 shl 8
+	ld	bc,4 shl 8
 crcclp:	ld	a,(de)
 	adc	a,(hl)
 	push	af
@@ -673,28 +698,26 @@ crcclp:	ld	a,(de)
 	or	a
 	jr	z,crcok
 	call	ilprt
-	db	"CRC error",CR,0
+	db	'CRC error',CR,LF,0
 	jr	wildck
 ;
 crcok:	ld	a,(mode)
 	or	a
 	jr	z,crcok2
 	call	ilprt
-	DB	CR,0
+	DB	CR,LF,0
 	jr	wildck
 crcok2:	call	ilprt
-	db	"CRC OK",CR,0
-wildck:	ret
-
-;	ld	a,(curmode)
-;	or	a
-;	ret	z
-;wild2:	ld	hl,mtchfcb
-;	ld	bc,11
-;	ld	a,'?'
-;	cpir
-;	jp	nz,exit
-;	ret
+	db	'CRC OK',CR,LF,0
+wildck:	ld	a,(curmode)
+	or	a
+	ret	z
+wild2:	ld	hl,mtchfcb
+	ld	bc,11
+	ld	a,'?'
+	cpir
+	jp	nz,exit
+	ret
 ;
 getchla:
 	ld	a,(codesize)
@@ -784,7 +807,7 @@ rdbyr8:	rra			; 8x rra, not all are used in practice but
 ; The jp instruction here is awkward, due to differing
 ; local-symbol syntax between assemblers.
 ;
-rd1bit:	macro
+rd1bit	macro
 	ld	hl,(bitbuf)	; keep bitbuf in L, bleft in H
 	dec	h
 	jp	p,$+9		; jump to "xor a", past jp op plus 6 bytes:
@@ -830,14 +853,16 @@ ilprt:	pop	hl
 	call	pstr
 	jp	(hl)
 ;
-pstr:	ld	bc,(opts-1)	; b=options
+pstr:	ld	bc,(opts-1)	; d=options
 pstrlp:	ld	a,(hl)
 	or	a
 	ret	z
 	bit	4,b
 	jr	nz,pskip	; [Q]uiet
 	push	hl
-	call	0033h   ; TRS80
+	ld	e,a
+	ld	c,conout
+	call	bdos		; B preserved
 	pop	hl
 pskip:	inc	hl
 	jr	pstrlp
@@ -879,7 +904,57 @@ getword:
 	ret
 ;
 getbyte:
-	in	a,(4)
+	ld	a,(counting)
+	or	a
+	jr	nz,dodci
+	ld	a,(zipeof)
+	and	1
+	ld	a,CtrlZ
+	ret	nz
+	jr	skpdci
+dodci:	ld	hl,(cs)
+	ld	de,(cs + 2)
+	ld	a,d
+	or	e
+	or	h
+	or	l
+	jr	nz,noteof
+	ld	hl,zipeof
+	inc	(hl)
+	ld	a,CtrlZ
+	ret
+;
+noteof:	ld	a,h
+	or	l
+	dec	hl
+	ld	(cs),hl
+	jr	nz,skpdci
+	dec	de
+	ld	(cs + 2),de
+skpdci:	call	ckcon		; check console for abort
+	ld	hl,readpt
+	ld	a,(hl)
+	add	a,a
+	jr	nc,ptok
+	ld	(hl),a
+	ld	de,80h
+	push	hl
+	ld	c,setdma
+	call	bdos
+	call	setin
+	ld	de,infcb
+	ld	c,fread
+	call	bdos
+	or	a
+	pop	hl
+	jr	nz,ateof
+ptok:	ld	a,(hl)
+	inc	(hl)
+	ld	l,a
+	ld	h,0
+	ld	de,(inbufp)
+	add	hl,de
+	ld	a,(hl)
 	ret
 ;
 ateof:	ld	a,CtrlZ
@@ -939,7 +1014,7 @@ noeof1:	ld	hl,wrtpt
 	or	a
 	jr	z,wptok
 	call	ilprt
-	db	"Write Error (Disk full)",CR,0
+	db	'Write Error (Disk full)',CR,LF,0
 	jp	ckcon0
 ;
 wptok:	jr	nz,nofilb
@@ -998,7 +1073,7 @@ unshrink:
 	ld	(omask),a
 	ld	a,init_bits
 	ld	(codesize),a
-	ld	hl,1ffh       ; +(1 shl init_bits) - 1;
+	ld	hl,+(1 shl init_bits) - 1;
 	ld	(maxcode),hl
 	ld	hl,first_ent
 	ld	(free_ent),hl
@@ -1549,7 +1624,231 @@ sl6:	dec	hl
 	jr	nz,sl7
 	jr	sl1
 ;
+generatetrees:
+	ld	l,(ix + _entries)
+	ld	h,(ix + _entries + 1)
+	ld	c,l
+	ld	b,h
+	push	ix
+	pop	de
+	add	hl,hl
+	add	hl,hl
+	add	hl,de
+	push	hl
+	pop	iy
+	xor	a
+	ld	d,a
+	ld	e,a
+	ld	h,a
+	ld	l,a
+	ld	(lbl),a
+gt1:	ld	a,b
+	or	c
+	ret	z
+	dec	bc
+	add	hl,de
+	ld	a,(lbl)
+	cp	(iy + _bitlength)
+	jr	z,gt2
+	ld	a,(iy + _bitlength)
+	ld	(lbl),a
+	sub	16
+	ex	de,hl
+	ld	hl,1
+	jr	z,gt3
+gt4:	add	hl,hl
+	inc	a
+	jr	nz,gt4
+gt3:	ex	de,hl
+gt2:	ld	(iy + _code),l
+	ld	(iy + _code + 1),h
+	push	de
+	ld	de,-4
+	add	iy,de
+	pop	de
+	jr	gt1
 ;
+ldtrees:
+	ld	a,(gpbf)
+	rra
+	ld	l,a
+	and	1
+	add	a,6
+	ld	(dictb),a
+	ld	a,l
+	rra
+	and	1
+	ld	(ltp),a
+	set	1,a
+	ld	(mml),a
+	ld	ix,lit_tree
+	ld	hl,256
+	call	nz,ld_tree
+	ld	hl,64
+	ld	ix,len_tree
+	call	ld_tree
+	ld	hl,64
+	ld	ix,dist_tre
+ld_tree:
+	ld	(ix + _entries),l
+	ld	(ix + _entries + 1),h
+	call	readlengths
+	call	sortlengths
+	call	generatetrees
+reversebits:
+	push	ix
+	pop	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+rb1:	inc	hl
+	inc	hl
+	inc	hl
+	ld	c,(hl)
+	ld	b,8
+rb2:	srl	c
+	adc	a,a
+	djnz	rb2
+	push	af
+	inc	hl
+	ld	c,(hl)
+	ld	b,8
+rb3:	srl	c
+	adc	a,a
+	djnz	rb3
+	dec	hl
+	ld	(hl),a
+	pop	af
+	inc	hl
+	ld	(hl),a
+	dec	de
+	ld	a,d
+	or	e
+	jr	nz,rb1
+	ret
+;
+readtree:
+	push	ix
+	pop	iy
+	ld	de,4
+	add	iy,de
+	ld	b,d
+	ld	e,d
+	ld	h,d
+	ld	l,d
+rt1:	push	hl
+	push	de
+	push	bc
+	rd1bit
+	pop	af
+	push	af
+	or	a
+	jr	z,rt2
+rt3:	add	hl,hl
+	dec	a
+	jr	nz,rt3
+rt2:	pop	bc
+	pop	de
+	add	hl,de
+	ex	de,hl
+	inc	b
+	pop	hl
+rt4:	ld	a,(iy + _bitlength)
+	cp	b
+	jr	nc,rt5
+	push	de
+	ld	de,4
+	add	iy,de
+	pop	de
+	inc	hl
+	ld	a,(ix + _entries)
+	sub	l
+	jr	nz,rt4
+	ld	a,(ix + _entries + 1)
+	sub	h
+	jr	nz,rt4
+rt6:	dec	a
+	ret
+;
+rt5:	ld	a,(iy + _bitlength)
+	cp	b
+	jr	nz,rt1
+	ld	a,(iy + _code)
+	cp	e
+	jr	nz,rt7
+	ld	a,(iy + _code + 1)
+	cp	d
+	jr	nz,rt7
+	ld	a,(iy + _value)
+	ret
+;
+rt7:	push	de
+	ld	de,4
+	add	iy,de
+	pop	de
+	inc	hl
+	ld	a,(ix + _entries)
+	sub	l
+	jr	nz,rt5
+	ld	a,(ix + _entries + 1)
+	sub	h
+	jr	nz,rt5
+	jr	rt6
+;
+unimplode:
+	ld	a,1fh
+	ld	(omask),a
+	call	ldtrees
+ui1:	ld	a,(zipeof)
+	and	1
+	ret	nz
+	inc	a
+	call	readbits
+	or	a
+	jr	z,ui2
+	ld	a,(ltp)
+	or	a
+	jr	z,ui3
+	ld	ix,lit_tree
+	call	readtree
+	jr	ui4
+;
+ui3:	call	rdbyte
+ui4:	call	outb
+	jr	ui1
+;
+ui2:	ld	a,(dictb)
+	call	readbits
+	push	hl
+	ld	ix,dist_tre
+	call	readtree
+	ld	l,a		;;v1.5-1 unimplode fix
+	ld	h,0		;;v1.5-1
+	ld	bc,(dictb - 1)
+ui5:	add	hl,hl
+	djnz	ui5
+	pop	bc
+	add	hl,bc
+	push	hl
+	ld	ix,len_tree
+	call	readtree
+	ld	l,a
+	ld	h,0
+	cp	63
+	jr	nz,ui6
+	push	hl
+	call	rdbyte
+	pop	de
+	add	hl,de
+ui6:	ld	de,(mml)
+	ld	d,0
+	add	hl,de
+	ld	b,h
+	ld	c,l
+	pop	hl
+	inc	hl
+	call	callback
+	jr	ui1
 ;
 nextsymbol:
 	ld	(treep),hl
@@ -2055,10 +2354,10 @@ udbskp:	ld	a,(zipeof)
 	call	getbyte
 	jr	udbskp
 udblm:	call	ilprt
-	db	"Block length mismatch",CR,0
+	db	'Block length mismatch',CR,LF,0
 	jr	udbskp
 udubt:	call	ilprt
-	db	"Unknown block type",CR,0
+	db	'Unknown block type',CR,LF,0
 	jr	udbskp
 ;
 ; ckcon -- checks console for character; aborts if ^C
@@ -2070,9 +2369,9 @@ ckcon:	ld	a,1		; modified below
 	and	15
 	ld	(ckcon+1),a	; update LD A instruction above
 	ret	nz		; check every 16 calls only
-	push	de
-	call	2bh
-	pop	de
+	ld	e,0FFh		; check for character
+	ld	c,dircon
+	call	bdos
 	or	a
 	ret	z
 	cp	CtrlC		; ^C ?
@@ -2081,108 +2380,115 @@ ckcon:	ld	a,1		; modified below
 	or	a
 	jr	z,ckcon1	; (no)
 	call	setout
-ckcon0:	
-;	ld	de,opfcb	; ckcon0 jumped to for write error
-;	ld	c,fclose	; yes, close it
-;	call	bdos
-;	ld	de,opfcb
-;	ld	c,ferase	; and delete it
-;	call	bdos
-
-	ld	de,trsDCB
-	call	442Ch	; Kill does close the file
-;
+ckcon0:	ld	de,opfcb	; ckcon0 jumped to for write error
+	ld	c,fclose	; yes, close it
+	call	bdos
+	ld	de,opfcb
+	ld	c,ferase	; and delete it
+	call	bdos
 	call	ilprt
-	db	"Partial file erased -- ",0
+	db	'Partial file erased -- ',0
 ckcon1:	call	ilprt0
-	db	"Aborted",0
+	db	'Aborted',0
 	jp	exit
 ;
 ; getusr -- gets and stores source and destination users
 ;
-getusr: 
+getusr:	ld	hl,(Z3EAdr)	; ZCPR3?
+	ld	a,h
+	or	l
+	ret	z		; (no, skip this)
+	ld	a,(infcb+13)	; get source user
+	ld	(inusr),a
+	ld	a,(altfcb+13)	; get destination user
+	ld	(outusr),a
+	ret
 ;
 ; setin, setout -- logs to source or destination user
 ;
-setin:	
+setin:	ld	a,(inusr)
+	jr	setbth
 ;
-setout:	
-setbth:	ret
+setout:	ld	a,(outusr)
+setbth:	ld	e,a
+	ld	hl,(Z3EAdr)	; ZCPR3?
+	ld	a,h
+	or	l
+	ret	z		; (no, skip this)
+	ld	c,setusr
+	jp	bdos		; = call bdos!ret
 ;
-; copy the filename from cpm FCB to trs DCB
+; usage -- show syntax for ZCPR3 ("dir:") or vanilla CP/M ("d:")
 ;
-cp_fn_DCB: 
-	push	hl
-	push	de
-	push	bc
-	ld	hl,trsDCB
-	ld	de,trsDCB+1
-	ld	bc,31  
-	ld	a,20h
-	ld	(hl),a
-	ldir
-	ld	hl,opfn
-	ld	de,trsDCB
-	ld	b,8
-cp_fn_l01: 
-	ld	a,(hl)
-	inc	hl
-	cp	a,20h
-	jr	z,cp_fn_ex1
-	ld	(de),a
-	inc	de
-	djnz	cp_fn_l01
-cp_fn_ex1:
-	ld	hl,opext
-	ld	a,(hl)
-	cp	a,20h
-	jr	z,cp_fn_d1
-	ld	b,3
-	ld	a,'/'
-	ld	(de),a
-	inc	de
-cp_fn_l02:
-	ld	a,(hl)
-	inc	hl
-	cp	a,20h
-	jr	z,cp_fn_d1
-	ld	(de),a
-	inc	de
-	djnz	cp_fn_l02
-cp_fn_d1:
-	ld	a,':'
-	ld	(de),a
-	ld	a,(opfcb)
-	or	a
-	jr	z,cp_fn_end
-	inc	de
-	add	a,30h
-	ld	(de),a
-	inc	de
-cp_fn_end:
-	ld	a,CR
-	ld	(de),a
-	inc	de
-	xor	a
-	ld	(de),a
-;	push 	de
-;	ld	hl,trsDCB
-;	call	pstr
-;	pop	de
-	ld	a,20h
-	ld	(de),a
-
-	ld 	hl,trsDCB
-	ld	a,(hl)
-	cp	a,41h
-	jr	nc,cp_ok
-	add	a,11h
-	ld	(hl),a
-cp_ok:
-	pop	bc
-	pop	de
-	pop	hl
-	ret		
+usage:	call	ilprt0
+	DB 'UNZIP  v'
+	DB Vers/10+'0','.',Vers mod 10+'0'
+	DB '-',Revisn mod 10+'0',' '
+; convert VersDD, VersMM, VersYY to date string in dd-mmm-yyyy format
+	defb	'0'+(VersDD / 10),'0'+(VersDD mod 10),'-'
+	if (VersMM lt 1) or (VersMM gt 12)
+	  defb	'xxx'
+	else
+	  if VersMM eq 1
+	    defb	'Jan'
+	  endif
+	  if VersMM eq 2
+	    defb	'Feb'
+	  endif
+	  if VersMM eq 3
+	    defb	'Mar'
+	  endif
+	  if VersMM eq 4
+	    defb	'Apr'
+	  endif
+	  if VersMM eq 5
+	    defb	'May'
+	  endif
+	  if VersMM eq 6
+	    defb	'Jun'
+	  endif
+	  if VersMM eq 7
+	    defb	'Jul'
+	  endif
+	  if VersMM eq 8
+	    defb	'Aug'
+	  endif
+	  if VersMM eq 9
+	    defb	'Sep'
+	  endif
+	  if VersMM eq 10
+	    defb	'Oct'
+	  endif
+	  if VersMM eq 11
+	    defb	'Nov'
+	  endif
+	  if VersMM eq 12
+	    defb	'Dec'
+	  endif
+	endif
+	defb	'-','0'+((VersYY / 1000) mod 10),'0'+((VersYY / 100) mod 10)
+	defb	'0'+((VersYY / 10) mod 10),'0'+(VersYY mod 10)
+	DB CR,LF,'Usage: '
+	DB 'UNZIP {d',0
+	ld	hl,(Z3EAdr)
+	ld	a,h
+	or	l
+	jr	z,usage2
+	call	ilprt
+	db	'ir',0
+usage2:	call	ilprt
+	db	':}<zipfile>[.zip] {d',0
+	ld	hl,(Z3EAdr)
+	ld	a,h
+	or	l
+	jr	z,usage3
+	call	ilprt
+	db	'ir',0
+usage3:	call	ilprt
+	db	':}{afn.typ} [OQ]',CR,LF
+	db	'If a destination is given, files are extracted.',CR,LF
+	db	'If not, files are checked and listed.',CR,LF,0
+	jp	exit
 ;
 ; data storage . . .
 ;	
@@ -2431,10 +2737,8 @@ opfcb:	ds	1		; output file control block
 opfn:	ds	8
 opext:	ds	3
 	ds	24
-trsDCB: ds	32		; DCB for TRS80
-trsBUF:	ds	256
-;mtchfcb:
-;	ds	11
+mtchfcb:
+	ds	11
 ; note that as indicated above, bitbuf must be the byte before bleft
 bitbuf:	ds	1
 vars:
@@ -2503,6 +2807,13 @@ suffix_of:
 	ds	8192
 prefix_of:
 Slen:
+lit_tree:
+	ds	_sf_tree_
+len_tree:
+	ds	_sf_tree_
+dist_tre:
+	ds	_sf_tree_
+	ds	16384 + 2 - (3 * _sf_tree_)
 followers:
 stack:	ds	8192 - 2
 lenld:	ds	nrlit + nrdist
@@ -2511,5 +2822,5 @@ littr:	ds	4 * nrlit
 disttr:	ds	4 * nrdist
 endtr:
 	ds	8192 + 2 - (endtr - lenld)
-endaddr: ds     1	; must be no vars/data beyond this point
-
+endaddr:	; must be no vars/data beyond this point
+	end

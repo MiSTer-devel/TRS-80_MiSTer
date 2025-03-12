@@ -50,7 +50,14 @@ Port (
 
 	clk42m     : in  STD_LOGIC;
 	cpum1_out  : out STD_LOGIC;
-
+	omikron	  : in  std_logic;
+	omkr_addr  : out std_logic_vector(13 downto 0) ;
+	omkr_data  : in  std_logic_vector(7 downto 0) ;
+--	omkr_out   : out std_logic_vector(7 downto 0) ;
+--	omkr_wr	  : out STD_LOGIC;
+--	omkr_write : in  STD_LOGIC;
+	reset_mapper: in  std_logic;
+	
 	RGB        : out STD_LOGIC_VECTOR (23 downto 0);
 	HSYNC      : out STD_LOGIC;
 	VSYNC      : out STD_LOGIC;
@@ -81,7 +88,7 @@ Port (
 	dn_go      : in  std_logic;
 	dn_wr      : in  std_logic;
 	dn_rd		  : in  std_logic;
-	dn_addr    : in  std_logic_vector(24 downto 0);
+	dn_addr    : in  std_logic_vector(16 downto 0);
 	dn_data    : in  std_logic_vector(7 downto 0);
 	dn_din	  : out std_logic_vector(7 downto 0);
 
@@ -138,7 +145,6 @@ Port (
 end trs80;
 
 architecture Behavioral of trs80 is
-
 
 --
 -- This is a static line of test to display on the debug line
@@ -247,6 +253,7 @@ component fdc1771 is
 			clk_sys  		: in std_logic;
 			clk_cpu  		: in std_logic;
 			clk_div	    	: in integer;
+			spt9				: in std_logic;
 
 			floppy_drive    : in std_logic_vector(3 downto 0);
 			floppy_side		: in std_logic;
@@ -355,6 +362,7 @@ signal ram_b_din : STD_LOGIC_VECTOR(7 downto 0);
 signal ram_b_wr  : std_logic ;
 
 signal cpua     : std_logic_vector(15 downto 0);
+signal cpua80   : std_logic_vector(15 downto 0);
 signal cpudo    : std_logic_vector(7 downto 0);
 signal cpudi    : std_logic_vector(7 downto 0);
 signal cpuwr,cpurd,cpumreq,cpuiorq,cpum1 : std_logic;
@@ -504,6 +512,14 @@ signal ss_ram_addr : std_logic_vector(15 downto 0);
 -- signal ss_debug_ctr : std_logic_vector(15 downto 0);
 signal img_rgb : std_logic_vector(31 downto 0);
 
+-- Omikron control register (port 0)
+signal omkr_port : std_logic_vector(7 downto 0) ;
+signal omkr_sel : std_logic ;
+signal cpurd_d : std_logic ;
+signal cpum1_d : std_logic ;
+signal cpua_d  : std_logic_vector(15 downto 0);
+signal omkr_d : std_logic_vector(7 downto 0) ;
+
 begin
 
 -- block the Z80 cpu whenever we download something, execute a forced jump 0, or read memory for a save_state !! MAKE SURE TO DO IT IN (cpu)M1 STATE !!
@@ -513,6 +529,7 @@ DIRZ80 <= DIR when ss_sel = '0' else SS_DIR ;
 DIRSetZ80 <= DIRSet when ss_sel = '0' else ss_DIRSet ;
 cpum1_out <= cpum1 ;
 exec_stack <= REG(63 downto 48) ;
+-- omkr_out <= cpudo ; 
 
 regset : z80_regset
 port map
@@ -675,6 +692,7 @@ port map
 	clk_sys	=> clk42m,
 	clk_cpu => cpuClk,
 	clk_div => fdc_clk_div,
+	spt9	=> omikron and not omkr_port(3),
 
 	floppy_drive => floppy_select,			-- ** Link up to drive select code
 	floppy_side => '1',				-- Only single sided for now
@@ -825,7 +843,7 @@ port map
 	IORQ_n  => cpuiorq,
 	RD_n    => cpurd,
 	WR_n    => cpuwr,
-	A       => cpua,
+	A       => cpua80,
 	DI      => cpudi,
 	DO      => cpudo,
 	REG		=> REG,
@@ -833,29 +851,54 @@ port map
 	DIRSet	=> DIRSetZ80
 );
 
-cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
-		 kbdout when kbdsel='1' else	
-		 fdc_dout when fdc_rd='0' else	
-		 -- Floppy select and irq signals	
-		 (not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
-  		 ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
+ -- Omikron addresses mixology
+process(clk42m, reset_mapper)
+begin
+	if reset_mapper='1' or omikron='0' then
+		omkr_port <= "00000000" ;
+	else
+		if rising_edge(clk42m) then
+			if(iow='0' and cpua(7 downto 0)="00") then
+				omkr_port <= cpudo ;
+			end if;
+		end if;
+	end if;
+end process;
 
-         x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
 
-         "1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))	-- trisstick right, left, down, up
-                when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else						-- (BIG5 type; "fire" shows as "up+down")
-         "111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))					-- trisstick fire, right, left, down, up
-                when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else						-- (Alpha products type; separate fire bit)
-         "11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else					-- no joystick = empty port
+ cpua(13 downto 0) <= cpua80(13 downto 0) ;
+ cpua(14) <= cpua80(14) when (omikron='0' or omkr_port(2)='0') else not cpua80(15) ; -- warning 15 and not 14, its not a typo  
+ cpua(15) <= cpua80(15) when (omikron='0' or omkr_port(2)='0') else not cpua80(14) ; -- 00->11, 01->01, 10->10, 11->00
+ omkr_sel <= '1' when omikron='1' and omkr_port(3)='0' and cpua(15 downto 14)="00" else '0' ;
+ omkr_addr <= cpua80(13 downto 0) ;
+-- omkr_wr <= (not memw) and cpua(15) and cpua(14) and omikron and not omkr_port(3) and omkr_port(2) and omkr_write ;
 
-         tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else					-- cassette data
+ 
+ -- CPU Input
+ 
+ cpudi <= vramdo when vramsel='1' else												-- RAM		($3C00-$3FFF)
+	kbdout when kbdsel='1' else	
+	fdc_dout when fdc_rd='0' else	
+ -- Floppy select and irq signals	
+	(not clk_25ms_latch) & fdc_irq & "000000" when irq_latch_read='1' else
+		ram_b_dout when ior='0' and cpua(7 downto 0)=x"04" else			-- special case of system hack
+
+		x"30"  when ior='0' and cpua(7 downto 0)=x"fd" else																-- printer io read
+
+		"1111" & (not joy0(0)) & (not joy0(1)) & (not (joy0(2) or joy0(4))) & (not (joy0(3) or joy0(4)))	-- trisstick right, left, down, up
+			 when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "01" else						-- (BIG5 type; "fire" shows as "up+down")
+		"111"  & (not joy0(4)) & (not joy0(0)) & (not joy0(1)) & (not joy0(2)) & (not joy0(3))					-- trisstick fire, right, left, down, up
+			 when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "10" else						-- (Alpha products type; separate fire bit)
+		"11111111" when ior='0' and cpua(7 downto 0)=x"00" and joytype(1 downto 0) = "00" else					-- no joystick = empty port
+
+		tapelatch & "111" & widemode & tapebits	when ior='0' and cpua(7 downto 0)=x"ff" else					-- cassette data
 			rs232_out when rs232_rd='0' else 
-			
+	
 			x"ff"  when ior='0' else													-- all unassigned ports
 
-         ram_b_dout;																		-- RAM
+			omkr_data when omkr_sel='1' else ram_b_dout;																		-- RAM
 
-			
+		
 -- video ram at 0x3C00
 dbugmsg_video <= dbugmsg_data when debug_select_line='0' else dbugldr_data;
 
@@ -946,11 +989,18 @@ begin
 --		when 43 => dbugmsg_data <= hex(conv_integer(dbg_spare(11 downto 8))); 
 --		when 44 => dbugmsg_data <= hex(conv_integer(dbg_spare(7 downto 4))); 
 --		when 45 => dbugmsg_data <= hex(conv_integer(dbg_spare(3 downto 0))); 
-		when 42 => dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 12))); 
-		when 43 => dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8))); 
-		when 44 => dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4))); 
-		when 45 => dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0))); 
-		
+--		when 42 => dbugmsg_data <= hex(conv_integer(uart_debug(15 downto 12))); 
+--		when 43 => dbugmsg_data <= hex(conv_integer(uart_debug(11 downto 8))); 
+--		when 44 => dbugmsg_data <= hex(conv_integer(uart_debug(7 downto 4))); 
+--		when 45 => dbugmsg_data <= hex(conv_integer(uart_debug(3 downto 0))); 
+		when 42 => dbugmsg_data <= hex(conv_integer(cpua(15 downto 12))); 
+		when 43 => dbugmsg_data <= hex(conv_integer(omikron)); 
+		when 44 => dbugmsg_data <= hex(conv_integer(omkr_port(7 downto 4))); 
+		when 45 => dbugmsg_data <= hex(conv_integer(omkr_port(3 downto 0))); 		
+--		when 42 => dbugmsg_data <= hex(conv_integer(cpua(15 downto 12))); 
+--		when 43 => dbugmsg_data <= hex(conv_integer(cpua(11 downto 8))); 
+--		when 44 => dbugmsg_data <= hex(conv_integer(cpua(7 downto 4))); 
+--		when 45 => dbugmsg_data <= hex(conv_integer(cpua(3 downto 0))); 		
 		when 47 => if(tick_1s='0') then dbugmsg_data <= x"20"; else dbugmsg_data <= x"2a"; end if;
 		--
 		-- otherwise split the remainder: first half just reads from the default text buffer,
@@ -1579,5 +1629,6 @@ begin
 		-- end if;
    end if;	
 end process;
+
 
 end Behavioral;
