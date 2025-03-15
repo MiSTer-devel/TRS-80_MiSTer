@@ -74,7 +74,7 @@ localparam TRACKS = 8'd240;         // max allowed track
 // number of physical bytes per track
 localparam BPTSD = RATESD*60/(8*RPM);
 localparam BPTDD = RATEDD*60/(8*RPM);
-localparam BPTDD_SET = RATEDD*50/(8*RPM); // Set value to get an index pulse *soon*
+localparam BPTDD_SET = RATEDD*56/(8*RPM); // Set value to get an index pulse *soon*
 localparam BPTHD = RATEHD*60/(8*RPM);
 
 // report disk ready if it spins at full speed and head is not moving

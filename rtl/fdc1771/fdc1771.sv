@@ -1112,7 +1112,8 @@ end
 always_comb
 begin
 	s7 = !fd_ready | notready_wait ;
-	if (!floppy_present && !cmd_type_4) begin		// Pull-ups if no disk attached, but wait, it's kind of subtle here.
+// CP/M is epecting status 
+	if (!floppy_present && !spt9) begin		// Pull-ups if no disk attached, but wait, it's kind of subtle here.
 		if ((floppy_drive=="1111") || (no_contr==1'b1))  begin // at boot ? (normally we select one drive, but at boot it wants to check if the controller is here
 				s6 = 1'b1;  // simulate no controller
 				s5 = 1'b1;
@@ -1243,7 +1244,7 @@ reg cmd_rx /* verilator public */;
 reg data_in_strobe;
 // reg trsdd_enable;	// TRS-Disk Doubler
 
-always_ff @(posedge clk_sys) begin
+always @(posedge clk_sys) begin
 	if(!floppy_reset) begin
 		// clear internal registers
 		cmd <= 8'h00;
@@ -1310,7 +1311,7 @@ always_ff @(posedge clk_sys) begin
 
 				// ------------- TYPE IV commands -------------
 				if(cpu_din[7:4] == 4'b1101) begin               // force intrerupt
-					index_set <=1'b1 ;
+					if (spt9) index_set <=1'b1 ;
 				end
 			end
 
