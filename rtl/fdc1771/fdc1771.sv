@@ -184,7 +184,7 @@ reg  [22:0] mounted_size[4] ; // size of mounted image per slot, in sectors
 reg   [4:0] image_spt; // sectors/track
 reg   [9:0] image_gap_len;
 reg         image_doubleside;
-wire [1:0] image_hd = 2'b00; //img_size[20];
+wire [1:0] image_hd ; //img_size[20];
 
 always @(*) begin
 //	if (sector_size_code == 3) begin
@@ -213,8 +213,13 @@ always @(*) begin
 		//	800 : image_spt = 5'd10;	// SD Floppy - 80 tracks
 		//	default : image_spt = 5'd10;
 		//endcase;
-		if (spt9) image_spt = 5'd18 ; else // 18 sectors per track for CP/M Omikron
-					image_spt = 5'd10;
+		if (spt9) begin
+				image_spt = 5'd18 ;
+				image_hd = 2'b01 ; 	
+			end else begin // 18 sectors per track for CP/M Omikron
+				image_spt = 5'd10;
+				image_hd = 2'b00 ;
+			end
 
 		//if (image_hd) image_spt = image_spt << 1'b1;
 
@@ -320,6 +325,8 @@ end
 // -------------------------------------------------------------------------
 // ------------------------------- floppy 0 --------------------------------
 // -------------------------------------------------------------------------
+wire index_set ;
+
 wire fd0_index;
 wire fd0_ready;
 wire fd0_HLD;
@@ -355,7 +362,8 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy0 (
 	.sector_data ( fd0_sector_data ),
 	.HLD       	 ( fd0_HLD         ),
 	.ready       ( fd0_ready       ),
-	.index       ( fd0_index       )
+	.index       ( fd0_index       ),
+	.index_set	 ( index_set		 )
 );
 
 // -------------------------------------------------------------------------
@@ -396,7 +404,8 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy1 (
 	.sector_data ( fd1_sector_data ),
 	.HLD       	 ( fd1_HLD         ),
 	.ready       ( fd1_ready       ),
-	.index       ( fd1_index       )
+	.index       ( fd1_index       ),
+	.index_set	 ( index_set		 )
 );
 
 // -------------------------------------------------------------------------
@@ -437,7 +446,8 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy2 (
 	.sector_data ( fd2_sector_data ),
 	.HLD       	 ( fd2_HLD         ),
 	.ready       ( fd2_ready       ),
-	.index       ( fd2_index       )
+	.index       ( fd2_index       ),
+	.index_set	 ( index_set		 )
 );
 
 // -------------------------------------------------------------------------
@@ -478,7 +488,8 @@ floppy #(.SYS_CLK(SYS_CLK)) floppy3 (
 	.sector_data ( fd3_sector_data ),
 	.HLD       	 ( fd3_HLD         ),
 	.ready       ( fd3_ready       ),
-	.index       ( fd3_index       )
+	.index       ( fd3_index       ),
+	.index_set	 ( index_set		 )
 );
 
 // -------------------------------------------------------------------------
@@ -1101,7 +1112,8 @@ end
 always_comb
 begin
 	s7 = !fd_ready | notready_wait ;
-	if (!floppy_present) begin		// Pull-ups if no disk attached, but wait, it's kind of subtle here.
+// CP/M is epecting status 
+	if (!floppy_present && !spt9) begin		// Pull-ups if no disk attached, but wait, it's kind of subtle here.
 		if ((floppy_drive=="1111") || (no_contr==1'b1))  begin // at boot ? (normally we select one drive, but at boot it wants to check if the controller is here
 				s6 = 1'b1;  // simulate no controller
 				s5 = 1'b1;
@@ -1245,12 +1257,13 @@ always @(posedge clk_sys) begin
 		data_in_strobe <= 0;
 		// trsdd_enable <= 1'b0;
 	end else begin
-		data_in_strobe <= 0;
+		data_in_strobe <= 0;			
+		index_set <= 1'b0 ;
 
 		// cmd_rx is delayed to make sure all signals (the cmd!) are stable when
 		// cmd_rx is evaluated
 	//	cmd_rx <= cmd_rx_i;    // FLYNN : I removed this cmd_rx_i delay, since I sincerely don't get it. I kept it commented out to put it back easely if needed
-
+      
 		// command reception is ack'd by fdc going busy
 		if((!cmd_type_4 && busy) || (clk_cpu && cmd_type_4 && !busy)) cmd_rx <= 1'b0; // FLYNN cmd_rx_i
 
@@ -1298,6 +1311,7 @@ always @(posedge clk_sys) begin
 
 				// ------------- TYPE IV commands -------------
 				if(cpu_din[7:4] == 4'b1101) begin               // force intrerupt
+					if (spt9) index_set <=1'b1 ;
 				end
 			end
 

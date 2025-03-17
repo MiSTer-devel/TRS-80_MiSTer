@@ -42,8 +42,9 @@ module floppy (
 	
 	output 	     ready,        // drive is ready, data can be read - nn - could be 1
 	output 	     HLD,        // Simulated Head loaded
-	output reg   index			// Used only in status register to report the index hole
-);
+	output reg   index,			// Used only in status register to report the index hole
+	input			 index_set		// Hack for Omikron to set the index counter to a near-index value
+	);
 
 // The sysclock is the value all floppy timings are derived from. 
 // Default: 8 MHz
@@ -73,6 +74,7 @@ localparam TRACKS = 8'd240;         // max allowed track
 // number of physical bytes per track
 localparam BPTSD = RATESD*60/(8*RPM);
 localparam BPTDD = RATEDD*60/(8*RPM);
+localparam BPTDD_SET = RATEDD*56/(8*RPM); // Set value to get an index pulse *soon*
 localparam BPTHD = RATEHD*60/(8*RPM);
 
 // report disk ready if it spins at full speed and head is not moving
@@ -203,6 +205,7 @@ end
 (* preserve *) reg [14:0] byte_cnt;
 (* preserve *) reg index_pulse_start;
 always @(posedge clk) begin
+	if (index_set) byte_cnt <= BPTDD_SET ; else
 	if (byte_clk_en) begin
 		index_pulse_start <= 1'b0;
 
@@ -233,7 +236,7 @@ end
 
 // number of system clock cycles after which disk has reached
 // full speed
-wire [31:0] SPIN_UP_CLKS = (SYS_CLK / 1000 * SPINUP)/clk_div;
+wire [31:0] SPIN_UP_CLKS = (SYS_CLK / 1000 * SPINUP)/clk_div; 
 wire [31:0] SPIN_DOWN_CLKS = (SYS_CLK / 1000 * SPINDOWN)/clk_div;
 reg [31:0] spin_up_counter;
 
