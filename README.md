@@ -8,7 +8,7 @@ https://www.classic-computers.org.nz/system-80/driving_instructions.htm
 The TRS-80 with boot to a "Ready?" screen, loading Basic with no drive support to let you load a cassette game. Once you place a disk in the drive 0 using the OSD menu and reset, it will boot on the drive.
 
 ## Boot Rom
-You must provide a file named "BOOT.ROM" that contains a TRS-80 Model I ROM image. The file must be placed in /media/fat/games/TRS-80 or another location permitted by MiSTer. Any original should work, or a System80 one, and you may look at www.classic-computers.org.nz/system80/ (section emulators) to find one. Usual size for this file is 12 kib or 14 kib.
+You must provide a file named "BOOT.ROM" that contains a TRS-80 Model I ROM image. The file must be placed in /media/fat/games/TRS-80 or another location permitted by MiSTer. Any original should work, or a System80 one, and you may look at www.classic-computers.org.nz/system-80/software_archive.htm to find one. Usual size for this file is 12 kib or 14 kib.
 The modified ROM that permits fast cassette accesses may be built from the file "system_80_bluelabel_rom" by applying the following patch :
 ```
   at location 0x236
